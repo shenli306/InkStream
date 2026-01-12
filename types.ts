@@ -17,6 +17,12 @@ export interface Novel {
   downloadUrl?: string;
   chapters: Chapter[];
   sourceName?: string;
+  sources?: NovelSource[];
+}
+
+export interface NovelSource {
+  name: string;
+  url: string;
 }
 
 export enum AppState {

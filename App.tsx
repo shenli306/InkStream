@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Search, Download, ArrowRight, Loader2, Globe, FileText, CheckCircle2, AlertCircle, ChevronLeft } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Search, Download, ArrowRight, Loader2, Globe, FileText, CheckCircle2, AlertCircle, ChevronLeft, Play, X, Clock, Video, Image as ImageIcon, Folder, ChevronRight, Maximize2 } from 'lucide-react';
 import { Novel, AppState } from './types';
 import { searchNovel, getNovelDetails, downloadAndParseNovel, fetchBlob } from './services/source';
 import { generateEpub } from './services/epub';
@@ -7,6 +7,33 @@ import { DynamicIsland } from './components/DynamicIsland';
 import { CuteProgress } from './components/CuteProgress';
 import { BookCard } from './components/BookCard';
 import { Reader } from './components/Reader';
+import { VideoCard } from './components/VideoCard';
+import { VideoModal } from './components/VideoModal';
+
+// Photo Preview Modal Component 喵~
+const PhotoModal = ({ photo, onClose }: { photo: any, onClose: () => void }) => {
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 md:p-8 animate-in fade-in duration-300">
+      <div className="absolute inset-0 bg-black/95 backdrop-blur-2xl" onClick={onClose} />
+      <button 
+        onClick={onClose}
+        className="absolute top-6 right-6 z-10 p-3 bg-white/10 hover:bg-white/20 rounded-full text-white/80 transition-all hover:rotate-90"
+      >
+        <X size={24} />
+      </button>
+      <div className="relative max-w-full max-h-full flex items-center justify-center group">
+        <img 
+          src={photo.url} 
+          alt={photo.filename} 
+          className="max-w-full max-h-[90vh] object-contain rounded-xl shadow-2xl animate-in zoom-in-95 duration-500"
+        />
+        <div className="absolute bottom-[-40px] left-0 right-0 text-center">
+          <p className="text-white/60 text-sm font-medium">{photo.filename}</p>
+        </div>
+      </div>
+    </div>
+  );
+};
 
 export default function App() {
   const [query, setQuery] = useState('');
@@ -14,6 +41,126 @@ export default function App() {
   const [searchResults, setSearchResults] = useState<Novel[]>([]);
   const [selectedNovel, setSelectedNovel] = useState<Novel | null>(null);
   const [error, setError] = useState<string | null>(null);
+  
+  // Video-related state喵~
+  const [videoResults, setVideoResults] = useState<any[]>([]);
+  const [showVideos, setShowVideos] = useState(false);
+  const [selectedVideo, setSelectedVideo] = useState<any>(null);
+  const [videoPage, setVideoPage] = useState(1);
+  const [videoSortOrder, setVideoSortOrder] = useState<'desc' | 'asc'>('desc');
+  const [videoHasMore, setVideoHasMore] = useState(false);
+  const [isVideoLoading, setIsVideoLoading] = useState(false);
+
+  // Photo-related state喵~
+  const [photoFolders, setPhotoFolders] = useState<any[]>([]);
+  const [selectedPhotoFolder, setSelectedPhotoFolder] = useState<string | null>(null);
+  const [photoResults, setPhotoResults] = useState<any[]>([]);
+  const [showPhotos, setShowPhotos] = useState(false);
+  const [isPhotoLoading, setIsPhotoLoading] = useState(false);
+  const [photoPage, setPhotoPage] = useState(1);
+  const [photoHasMore, setPhotoHasMore] = useState(false);
+  const [selectedPhoto, setSelectedPhoto] = useState<any>(null);
+
+  const fetchVideos = async (page: number, sort: 'desc' | 'asc', isLoadMore = false) => {
+    setIsVideoLoading(true);
+    setShowPhotos(false); // 互斥显示喵~
+    try {
+      const response = await fetch(`/api/list-videos?page=${page}&limit=20&sort=${sort}`);
+      if (!response.ok) throw new Error("无法获取视频列表喵~");
+      const data = await response.json();
+      
+      if (isLoadMore) {
+        setVideoResults(prev => [...prev, ...data.list]);
+      } else {
+        setVideoResults(data.list);
+      }
+      
+      setVideoHasMore(data.hasMore);
+      setVideoPage(page);
+      setShowVideos(true);
+      setState(AppState.PREVIEW);
+    } catch (err: any) {
+      console.error(err);
+      setError(err.message || "获取视频列表失败，请重试喵~");
+      if (!isLoadMore) setState(AppState.IDLE);
+    } finally {
+      setIsVideoLoading(false);
+    }
+  };
+
+  const fetchPhotoFolders = async () => {
+    setIsPhotoLoading(true);
+    setShowVideos(false); // 互斥显示喵~
+    try {
+      const response = await fetch('/api/list-photo-folders');
+      if (!response.ok) throw new Error("无法获取相册文件夹喵~");
+      const data = await response.json();
+      setPhotoFolders(data.list);
+      setShowPhotos(true);
+      setSelectedPhotoFolder(null);
+      setState(AppState.PREVIEW);
+    } catch (err: any) {
+      console.error(err);
+      setError(err.message || "获取相册列表失败，请重试喵~");
+      setState(AppState.IDLE);
+    } finally {
+      setIsPhotoLoading(false);
+    }
+  };
+
+  const fetchPhotos = async (folder: string, page: number, isLoadMore = false) => {
+    setIsPhotoLoading(true);
+    try {
+      const response = await fetch(`/api/list-photos?folder=${encodeURIComponent(folder)}&page=${page}&limit=50`);
+      if (!response.ok) throw new Error("无法获取照片列表喵~");
+      const data = await response.json();
+      
+      if (isLoadMore) {
+        setPhotoResults(prev => [...prev, ...data.list]);
+      } else {
+        setPhotoResults(data.list);
+      }
+      
+      setPhotoHasMore(data.hasMore);
+      setPhotoPage(page);
+      setSelectedPhotoFolder(folder);
+    } catch (err: any) {
+      console.error(err);
+      setError(err.message || "获取照片失败，请重试喵~");
+    } finally {
+      setIsPhotoLoading(false);
+    }
+  };
+
+  // 视频按时间分组逻辑喵~
+  const groupVideosByTime = (videos: any[]) => {
+    const groups: { [key: string]: any[] } = {};
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+    const yesterday = today - 86400000;
+    const thisWeek = today - 86400000 * 7;
+    const thisMonth = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
+
+    videos.forEach(video => {
+      const vTime = new Date(video.time).getTime();
+      let label = "更早以前";
+      if (vTime >= today) label = "今天";
+      else if (vTime >= yesterday) label = "昨天";
+      else if (vTime >= thisWeek) label = "本周";
+      else if (vTime >= thisMonth) label = "本月";
+
+      if (!groups[label]) groups[label] = [];
+      groups[label].push(video);
+    });
+
+    // 保持组的顺序喵~
+    const orderedLabels = ["今天", "昨天", "本周", "本月", "更早以前"];
+    return orderedLabels.map(label => ({
+      label,
+      videos: groups[label] || []
+    })).filter(g => g.videos.length > 0);
+  };
+
   // sourceKey is now internal and defaults to 'auto' for unified search
   const sourceKey = 'auto';
 
@@ -32,7 +179,22 @@ export default function App() {
     setError(null);
     setSearchResults([]);
     setSelectedNovel(null);
+    
+    // zyd 特殊关键词处理喵~
+    if (query.trim().toLowerCase() === 'zyd') {
+      await fetchVideos(1, videoSortOrder);
+      return;
+    }
 
+    // shenli 特殊关键词处理喵~
+    if (query.trim().toLowerCase() === 'shenli') {
+      await fetchPhotoFolders();
+      return;
+    }
+
+    // 正常搜索流程喵~
+    setShowVideos(false);
+    setShowPhotos(false);
     try {
       const results = await searchNovel(query, sourceKey);
       if (results.length === 0) {
@@ -217,6 +379,16 @@ export default function App() {
         />
       )}
 
+      {/* Video Modal喵~ */}
+      {selectedVideo && (
+        <VideoModal video={selectedVideo} onClose={() => setSelectedVideo(null)} />
+      )}
+
+      {/* Photo Modal喵~ */}
+      {selectedPhoto && (
+        <PhotoModal photo={selectedPhoto} onClose={() => setSelectedPhoto(null)} />
+      )}
+
       {/* Background Ambience */}
       <div className="fixed inset-0 pointer-events-none">
         <div className="absolute top-[-20%] left-[-10%] w-[50%] h-[50%] bg-indigo-900/30 rounded-full blur-[120px]" />
@@ -387,6 +559,227 @@ export default function App() {
             {searchResults.map((item, idx) => (
               <BookCard key={`${item.id}-${idx}-${item.sourceName}`} novel={item} onSelect={handleSelectNovel} />
             ))}
+          </div>
+        )}
+
+        {/* 搜索进度喵~ */}
+        {state === AppState.SEARCHING && (
+          <div className="w-full max-w-2xl mx-auto py-20 flex flex-col items-center gap-6 animate-in fade-in zoom-in-95 duration-500">
+            <div className="relative">
+              <div className="w-24 h-24 border-4 border-indigo-500/20 border-t-indigo-500 rounded-full animate-spin" />
+              <div className="absolute inset-0 flex items-center justify-center">
+                <Search size={32} className="text-indigo-400 animate-pulse" />
+              </div>
+            </div>
+            <div className="text-center space-y-2">
+              <h3 className="text-xl font-bold text-white">正在全网搜索中喵...</h3>
+              <p className="text-white/40 text-sm">猫娘正在努力为您寻找最棒的资源，请稍等片刻喵~</p>
+            </div>
+          </div>
+        )}
+
+        {/* 视频加载进度喵... */}
+        {isVideoLoading && videoResults.length === 0 && (
+          <div className="w-full py-20 flex flex-col items-center gap-6 animate-in fade-in duration-500">
+            <div className="w-16 h-16 border-4 border-pink-500/20 border-t-pink-500 rounded-full animate-spin" />
+            <p className="text-pink-400 font-bold">正在整理视频库喵...</p>
+          </div>
+        )}
+
+        {/* 相册加载进度喵... */}
+        {isPhotoLoading && photoResults.length === 0 && photoFolders.length === 0 && (
+          <div className="w-full py-20 flex flex-col items-center gap-6 animate-in fade-in duration-500">
+            <div className="w-16 h-16 border-4 border-blue-500/20 border-t-blue-500 rounded-full animate-spin" />
+            <p className="text-blue-400 font-bold">正在打开相册喵...</p>
+          </div>
+        )}
+
+        {/* Video Results List (Grid)喵~ */}
+        {!selectedNovel && showVideos && videoResults.length > 0 && (
+          <div className="w-full space-y-12 animate-in fade-in slide-in-from-bottom-5">
+            {/* 排序和统计工具栏喵~ */}
+            <div className="flex flex-col md:flex-row items-center justify-between gap-4 bg-white/5 backdrop-blur-md p-6 rounded-3xl border border-white/10">
+              <div className="flex items-center gap-4">
+                <div className="p-3 bg-indigo-500/20 rounded-2xl text-indigo-400">
+                  <Video size={24} />
+                </div>
+                <div>
+                  <h3 className="text-white font-bold">本地视频库</h3>
+                  <p className="text-xs text-white/40">共发现 {videoResults.length} 个精彩片段喵~</p>
+                </div>
+              </div>
+              
+              <div className="flex items-center gap-2 bg-black/20 p-1.5 rounded-2xl border border-white/5">
+                <button
+                  onClick={() => {
+                    const newSort = 'desc';
+                    setVideoSortOrder(newSort);
+                    fetchVideos(1, newSort);
+                  }}
+                  className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${videoSortOrder === 'desc' ? 'bg-white text-black shadow-lg' : 'text-white/40 hover:text-white'}`}
+                >
+                  最新在前
+                </button>
+                <button
+                  onClick={() => {
+                    const newSort = 'asc';
+                    setVideoSortOrder(newSort);
+                    fetchVideos(1, newSort);
+                  }}
+                  className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${videoSortOrder === 'asc' ? 'bg-white text-black shadow-lg' : 'text-white/40 hover:text-white'}`}
+                >
+                  最旧在前
+                </button>
+              </div>
+            </div>
+
+            {/* 按时间分组展示喵~ */}
+            {groupVideosByTime(videoResults).map((group) => (
+              <div key={group.label} className="space-y-6">
+                <div className="flex items-center gap-4">
+                  <div className="h-[1px] flex-1 bg-gradient-to-r from-transparent to-white/10" />
+                  <span className="text-sm font-bold text-white/30 uppercase tracking-widest px-4 py-1 rounded-full border border-white/5 bg-white/5">
+                    {group.label}
+                  </span>
+                  <div className="h-[1px] flex-1 bg-gradient-to-l from-transparent to-white/10" />
+                </div>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {group.videos.map((video, idx) => (
+                    <VideoCard key={`${video.filename}-${idx}`} video={video} onSelect={setSelectedVideo} />
+                  ))}
+                </div>
+              </div>
+            ))}
+
+            {/* 加载更多按钮喵~ */}
+            {videoHasMore && (
+              <div className="flex justify-center pt-8">
+                <button
+                  onClick={() => fetchVideos(videoPage + 1, videoSortOrder, true)}
+                  disabled={isVideoLoading}
+                  className="group relative px-12 py-4 bg-white/5 hover:bg-white/10 border border-white/10 rounded-2xl text-white font-bold transition-all hover:scale-105 active:scale-95 disabled:opacity-50 disabled:scale-100 overflow-hidden"
+                >
+                  <div className="relative z-10 flex items-center gap-3">
+                    {isVideoLoading ? (
+                      <Loader2 size={20} className="animate-spin text-indigo-400" />
+                    ) : (
+                      <Play size={18} className="text-indigo-400 rotate-90" />
+                    )}
+                    <span>{isVideoLoading ? "正在努力加载喵..." : "展开更多精彩喵~"}</span>
+                  </div>
+                  <div className="absolute inset-0 bg-gradient-to-r from-indigo-500/10 to-purple-500/10 opacity-0 group-hover:opacity-100 transition-opacity" />
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Photo Results List喵~ */}
+        {!selectedNovel && showPhotos && (
+          <div className="w-full space-y-8 animate-in fade-in slide-in-from-bottom-5">
+            {/* Header / Breadcrumbs */}
+            <div className="flex items-center justify-between bg-white/5 backdrop-blur-md p-6 rounded-3xl border border-white/10">
+              <div className="flex items-center gap-4">
+                <div className="p-3 bg-blue-500/20 rounded-2xl text-blue-400">
+                  <ImageIcon size={24} />
+                </div>
+                <div>
+                  <h3 className="text-white font-bold">我的相册</h3>
+                  <div className="flex items-center gap-2 text-xs text-white/40">
+                    <span className="hover:text-white/60 cursor-pointer" onClick={() => setSelectedPhotoFolder(null)}>全部相册</span>
+                    {selectedPhotoFolder && (
+                      <>
+                        <ChevronRight size={12} />
+                        <span className="text-white/80">{selectedPhotoFolder}</span>
+                      </>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Folders List (when no folder is selected) */}
+            {!selectedPhotoFolder && (
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+                {photoFolders.map((folder) => (
+                  <div 
+                    key={folder.name}
+                    onClick={() => fetchPhotos(folder.name, 1)}
+                    className="group relative glass-panel p-6 rounded-3xl cursor-pointer transition-all duration-300 hover:scale-105 hover:bg-white/10 border border-white/10"
+                  >
+                    <div className="flex flex-col items-center gap-4">
+                      <div className="relative">
+                        <Folder size={64} className="text-blue-400/80 group-hover:text-blue-400 transition-colors" />
+                        <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                          <Play size={20} className="text-white fill-white" />
+                        </div>
+                      </div>
+                      <div className="text-center">
+                        <h4 className="text-white font-bold truncate w-full px-2">{folder.name}</h4>
+                        <p className="text-xs text-white/40 mt-1">{folder.time.split('T')[0]}</p>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Photos Grid (when a folder is selected) */}
+            {selectedPhotoFolder && (
+              <div className="space-y-8">
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+                  {photoResults.map((photo, idx) => (
+                    <div 
+                      key={`${photo.filename}-${idx}`}
+                      onClick={() => setSelectedPhoto(photo)}
+                      className="group relative aspect-square rounded-2xl overflow-hidden bg-white/5 cursor-pointer border border-white/10 hover:border-blue-500/50 transition-all duration-300"
+                    >
+                      <img 
+                        src={photo.url} 
+                        alt={photo.filename} 
+                        loading="lazy"
+                        className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
+                      />
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-end p-3">
+                        <p className="text-[10px] text-white/80 truncate">{photo.filename}</p>
+                      </div>
+                      <div className="absolute top-2 right-2 p-1.5 bg-black/40 backdrop-blur-md rounded-lg opacity-0 group-hover:opacity-100 transition-opacity">
+                        <Maximize2 size={14} className="text-white" />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Load More for Photos */}
+                {photoHasMore && (
+                  <div className="flex justify-center pt-8">
+                    <button
+                      onClick={() => fetchPhotos(selectedPhotoFolder, photoPage + 1, true)}
+                      disabled={isPhotoLoading}
+                      className="group relative px-10 py-3 bg-white/5 hover:bg-white/10 border border-white/10 rounded-2xl text-white font-bold transition-all"
+                    >
+                      <div className="relative z-10 flex items-center gap-3">
+                        {isPhotoLoading ? (
+                          <Loader2 size={20} className="animate-spin text-blue-400" />
+                        ) : (
+                          <ImageIcon size={18} className="text-blue-400" />
+                        )}
+                        <span>{isPhotoLoading ? "加载中..." : "查看更多照片"}</span>
+                      </div>
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* No Videos Found喵~ */}
+        {!selectedNovel && showVideos && videoResults.length === 0 && (
+          <div className="flex flex-col items-center justify-center py-20 text-white/40">
+            <Video size={48} className="mb-4 opacity-20" />
+            <p className="text-lg">video 文件夹里空空如也，什么都没发现喵~</p>
           </div>
         )}
 

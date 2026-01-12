@@ -7,16 +7,17 @@ export default defineConfig(({ mode }) => {
   return {
     server: {
       port: 3000,
+      allowedHosts: ['www.306825.xyz'], // 新增这一行，解决主机访问限制
       host: '0.0.0.0',
       proxy: {
         '/proxy/wanbenge': {
-          target: 'https://www.jizai22.com',
+          target: 'https://www.wanbenge.org',
           changeOrigin: true,
           secure: false,
           rewrite: (path) => path.replace(/^\/proxy\/wanbenge/, ''),
           headers: {
-            'Referer': 'https://www.jizai22.com/',
-            'Origin': 'https://www.jizai22.com',
+            'Referer': 'https://www.wanbenge.org/',
+            'Origin': 'https://www.wanbenge.org',
             'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Mobile/15E148 Safari/604.1'
           }
         },
@@ -41,6 +42,17 @@ export default defineConfig(({ mode }) => {
             'Origin': 'http://www.shukuge.com',
             'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Mobile/15E148 Safari/604.1'
           }
+        },
+        '/proxy/dingdian': {
+          target: 'https://www.23ddw.net',
+          changeOrigin: true,
+          secure: false,
+          rewrite: (path) => path.replace(/^\/proxy\/dingdian/, ''),
+          headers: {
+            'Referer': 'https://www.23ddw.net/',
+            'Origin': 'https://www.23ddw.net',
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+          }
         }
       }
     },
@@ -63,7 +75,8 @@ export default defineConfig(({ mode }) => {
 
               import('fs').then(async (fs) => {
                 const fsPromises = fs.promises;
-                const safeName = filename.replace(/[\\/:*?"<>|]/g, "_");
+                // 更严格的文件名过滤，防止路径穿越喵~
+                const safeName = filename.replace(/[\\/:*?"<>|]/g, "_").replace(/^\.+/, "");
                 const dir = path.join(__dirname, 'downloads');
 
                 try {
@@ -203,15 +216,199 @@ export default defineConfig(({ mode }) => {
               return;
             }
 
+            // 2.2 List Videos API (zyd feature) 喵~
+            if (url.pathname === '/api/list-videos') {
+              const page = parseInt(url.searchParams.get('page') || '1', 10);
+              const limit = parseInt(url.searchParams.get('limit') || '20', 10);
+              const sort = url.searchParams.get('sort') || 'desc';
+
+              import('fs').then(async (fs) => {
+                const fsPromises = fs.promises;
+                const videoDir = path.join(__dirname, 'video');
+
+                try {
+                  await fsPromises.access(videoDir);
+                } catch {
+                  await fsPromises.mkdir(videoDir, { recursive: true });
+                  res.setHeader('Content-Type', 'application/json; charset=utf-8');
+                  res.end(JSON.stringify({ list: [], total: 0, hasMore: false }));
+                  return;
+                }
+
+                try {
+                  const files = await fsPromises.readdir(videoDir);
+                  const videoExtensions = ['.mp4', '.mov', '.avi', '.webm', '.mkv'];
+                  const videoFiles = files.filter(f => videoExtensions.some(ext => f.toLowerCase().endsWith(ext)));
+
+                  // 获取文件统计信息并进行排序喵~
+                  const listWithStats = await Promise.all(videoFiles.map(async (f) => {
+                    try {
+                      const filePath = path.join(videoDir, f);
+                      const stats = await fsPromises.stat(filePath);
+                      return {
+                        filename: f,
+                        size: stats.size,
+                        time: stats.mtime.toISOString(), // 精确到毫秒的 ISO 8601 格式喵~
+                        mtimeMs: stats.mtimeMs,
+                        url: `/video/${encodeURIComponent(f)}`,
+                        type: 'video'
+                      };
+                    } catch (e) {
+                      return null;
+                    }
+                  }));
+
+                  const validList = listWithStats.filter(item => item !== null) as any[];
+                  
+                  // 排序逻辑喵~
+                  validList.sort((a, b) => {
+                    return sort === 'desc' ? b.mtimeMs - a.mtimeMs : a.mtimeMs - b.mtimeMs;
+                  });
+
+                  // 分页逻辑喵~
+                  const total = validList.length;
+                  const startIndex = (page - 1) * limit;
+                  const endIndex = startIndex + limit;
+                  const paginatedList = validList.slice(startIndex, endIndex);
+                  const hasMore = endIndex < total;
+
+                  res.setHeader('Content-Type', 'application/json; charset=utf-8');
+                  res.end(JSON.stringify({ 
+                    list: paginatedList, 
+                    total, 
+                    hasMore,
+                    page,
+                    limit
+                  }));
+                } catch (err) {
+                  console.error("Error listing videos:", err);
+                  res.statusCode = 500;
+                  res.end(JSON.stringify({ error: "Failed to list videos喵~" }));
+                }
+              });
+              return;
+            }
+
+            // 2. Photo Album API 喵~
+            if (url.pathname === '/api/list-photo-folders') {
+              import('fs').then(async (fs) => {
+                const fsPromises = fs.promises;
+                const photoDir = path.join(__dirname, 'Photo album');
+
+                try {
+                  await fsPromises.access(photoDir);
+                } catch {
+                  await fsPromises.mkdir(photoDir, { recursive: true });
+                  res.setHeader('Content-Type', 'application/json; charset=utf-8');
+                  res.end(JSON.stringify({ list: [] }));
+                  return;
+                }
+
+                try {
+                  const entries = await fsPromises.readdir(photoDir, { withFileTypes: true });
+                  const folders = await Promise.all(entries
+                    .filter(entry => entry.isDirectory())
+                    .map(async (entry) => {
+                      const folderPath = path.join(photoDir, entry.name);
+                      const stats = await fsPromises.stat(folderPath);
+                      return {
+                        name: entry.name,
+                        mtimeMs: stats.mtimeMs,
+                        time: stats.mtime.toISOString(),
+                        type: 'folder'
+                      };
+                    }));
+
+                  // 文件夹按修改时间排序喵~
+                  folders.sort((a, b) => b.mtimeMs - a.mtimeMs);
+
+                  res.setHeader('Content-Type', 'application/json; charset=utf-8');
+                  res.end(JSON.stringify({ list: folders }));
+                } catch (err) {
+                  res.statusCode = 500;
+                  res.end(JSON.stringify({ error: "Failed to list photo folders喵~" }));
+                }
+              });
+              return;
+            }
+
+            if (url.pathname === '/api/list-photos') {
+              const folder = url.searchParams.get('folder') || '';
+              const page = parseInt(url.searchParams.get('page') || '1', 10);
+              const limit = parseInt(url.searchParams.get('limit') || '50', 10);
+
+              if (!folder) {
+                res.statusCode = 400;
+                res.end(JSON.stringify({ error: "Folder parameter is required喵~" }));
+                return;
+              }
+
+              import('fs').then(async (fs) => {
+                const fsPromises = fs.promises;
+                const targetDir = path.join(__dirname, 'Photo album', folder.replace(/[\\/:*?"<>|]/g, "_"));
+
+                try {
+                  const files = await fsPromises.readdir(targetDir);
+                  const imageExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.heic'];
+                  const imageFiles = files.filter(f => imageExtensions.some(ext => f.toLowerCase().endsWith(ext)));
+
+                  const listWithStats = await Promise.all(imageFiles.map(async (f) => {
+                    try {
+                      const filePath = path.join(targetDir, f);
+                      const stats = await fsPromises.stat(filePath);
+                      return {
+                        filename: f,
+                        size: stats.size,
+                        time: stats.mtime.toISOString(),
+                        mtimeMs: stats.mtimeMs,
+                        url: `/photo/${encodeURIComponent(folder)}/${encodeURIComponent(f)}`,
+                        type: 'image'
+                      };
+                    } catch (e) {
+                      return null;
+                    }
+                  }));
+
+                  const validList = listWithStats.filter(item => item !== null) as any[];
+
+                  // 优先按文件名排序（因为文件名包含时间戳），如果文件名不包含时间戳则按修改时间排序喵~
+                  validList.sort((a, b) => {
+                    return b.filename.localeCompare(a.filename);
+                  });
+
+                  const total = validList.length;
+                  const startIndex = (page - 1) * limit;
+                  const endIndex = startIndex + limit;
+                  const paginatedList = validList.slice(startIndex, endIndex);
+                  const hasMore = endIndex < total;
+
+                  res.setHeader('Content-Type', 'application/json; charset=utf-8');
+                  res.end(JSON.stringify({
+                    list: paginatedList,
+                    total,
+                    hasMore,
+                    page,
+                    limit
+                  }));
+                } catch (err) {
+                  res.statusCode = 500;
+                  res.end(JSON.stringify({ error: "Failed to list photos喵~" }));
+                }
+              });
+              return;
+            }
+
             // 2.1 Cover Image API
             if (url.pathname.startsWith('/api/cover/')) {
               const filenameEncoded = url.pathname.replace('/api/cover/', '');
               const filename = decodeURIComponent(filenameEncoded);
+              // 安全审计：防止路径穿越喵~
+              const safeName = filename.replace(/[\\/:*?"<>|]/g, "_").replace(/^\.+/, "");
 
               import('fs').then(async (fs) => {
                 const fsPromises = fs.promises;
                 import('jszip').then(async (JSZip) => {
-                  const filePath = path.join(__dirname, 'downloads', filename);
+                  const filePath = path.join(__dirname, 'downloads', safeName);
 
                   try {
                     await fsPromises.access(filePath);
@@ -289,8 +486,10 @@ export default defineConfig(({ mode }) => {
             if (url.pathname.startsWith('/downloads/')) {
               import('fs').then(async (fs) => {
                 const fsPromises = fs.promises;
-                const safeUrl = decodeURIComponent(url.pathname).replace(/^\/downloads\//, '');
-                const filePath = path.join(__dirname, 'downloads', safeUrl);
+                const rawPath = decodeURIComponent(url.pathname).replace(/^\/downloads\//, '');
+                // 安全审计：防止路径穿越喵~
+                const safeName = rawPath.replace(/[\\/:*?"<>|]/g, "_").replace(/^\.+/, "");
+                const filePath = path.join(__dirname, 'downloads', safeName);
 
                 try {
                   const stats = await fsPromises.stat(filePath);
@@ -301,6 +500,114 @@ export default defineConfig(({ mode }) => {
                     next();
                   }
                 } catch {
+                  next();
+                }
+              });
+              return;
+            }
+
+            // 3.1 Serve Videos Static 喵~
+            if (url.pathname.startsWith('/video/')) {
+              import('fs').then(async (fs) => {
+                const fsPromises = fs.promises;
+                const rawPath = decodeURIComponent(url.pathname).replace(/^\/video\//, '');
+                const safeName = rawPath.replace(/[\\/:*?"<>|]/g, "_").replace(/^\.+/, "");
+                const filePath = path.join(__dirname, 'video', safeName);
+
+                try {
+                  const stats = await fsPromises.stat(filePath);
+                  if (stats.isFile()) {
+                    const ext = path.extname(safeName).toLowerCase();
+                    const mimeTypes: Record<string, string> = {
+                      '.mp4': 'video/mp4', '.mov': 'video/quicktime', '.avi': 'video/x-msvideo',
+                      '.webm': 'video/webm', '.mkv': 'video/x-matroska'
+                    };
+                    const contentType = mimeTypes[ext] || 'application/octet-stream';
+                    const fileSize = stats.size;
+                    const range = req.headers.range;
+
+                    if (range) {
+                      // 处理 Range 请求，让进度条调节丝滑顺畅喵~
+                      const parts = range.replace(/bytes=/, "").split("-");
+                      const start = parseInt(parts[0], 10);
+                      const end = parts[1] ? parseInt(parts[1], 10) : fileSize - 1;
+
+                      // 边界检查喵~
+                      const safeStart = Math.max(0, start);
+                      const safeEnd = Math.min(end, fileSize - 1);
+
+                      if (safeStart >= fileSize) {
+                        res.statusCode = 416;
+                        res.setHeader('Content-Range', `bytes */${fileSize}`);
+                        res.end();
+                        return;
+                      }
+
+                      const chunksize = (safeEnd - safeStart) + 1;
+                      const file = fs.createReadStream(filePath, { start: safeStart, end: safeEnd });
+                      
+                      res.writeHead(206, {
+                        'Content-Range': `bytes ${safeStart}-${safeEnd}/${fileSize}`,
+                        'Accept-Ranges': 'bytes',
+                        'Content-Length': chunksize,
+                        'Content-Type': contentType,
+                        'Cache-Control': 'public, max-age=3600', // 缓存一小时喵~
+                        'Connection': 'keep-alive'
+                      });
+                      file.pipe(res);
+                    } else {
+                      // 普通完整请求喵~
+                      res.writeHead(200, {
+                        'Content-Length': fileSize,
+                        'Content-Type': contentType,
+                        'Accept-Ranges': 'bytes',
+                        'Cache-Control': 'public, max-age=3600'
+                      });
+                      fs.createReadStream(filePath).pipe(res);
+                    }
+                  } else {
+                    next();
+                  }
+                } catch (err) {
+                  next();
+                }
+              });
+              return;
+            }
+
+            // 3.2 Serve Photos Static 喵~
+            if (url.pathname.startsWith('/photo/')) {
+              import('fs').then(async (fs) => {
+                const fsPromises = fs.promises;
+                const parts = decodeURIComponent(url.pathname).split('/');
+                // /photo/[folder]/[filename]
+                if (parts.length < 4) {
+                  next();
+                  return;
+                }
+                const folder = parts[2].replace(/[\\/:*?"<>|]/g, "_");
+                const filename = parts[3].replace(/[\\/:*?"<>|]/g, "_");
+                const filePath = path.join(__dirname, 'Photo album', folder, filename);
+
+                try {
+                  const stats = await fsPromises.stat(filePath);
+                  if (stats.isFile()) {
+                    const ext = path.extname(filename).toLowerCase();
+                    const mimeTypes: Record<string, string> = {
+                      '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png',
+                      '.gif': 'image/gif', '.webp': 'image/webp', '.heic': 'image/heic'
+                    };
+                    const contentType = mimeTypes[ext] || 'application/octet-stream';
+                    res.writeHead(200, {
+                      'Content-Length': stats.size,
+                      'Content-Type': contentType,
+                      'Cache-Control': 'public, max-age=86400' // 缓存一天喵~
+                    });
+                    fs.createReadStream(filePath).pipe(res);
+                  } else {
+                    next();
+                  }
+                } catch (err) {
                   next();
                 }
               });
@@ -357,6 +664,24 @@ export default defineConfig(({ mode }) => {
                         }
                         return;
                       }
+
+                      // 安全审计：防止 SSRF 攻击喵~
+                      const blockedHosts = ['localhost', '127.0.0.1', '0.0.0.0', '::1'];
+                      const isPrivate = (host: string) => {
+                        return blockedHosts.includes(host) || 
+                               host.startsWith('192.168.') || 
+                               host.startsWith('10.') || 
+                               /^172\.(1[6-9]|2[0-9]|3[0-1])\./.test(host);
+                      };
+
+                      if (isPrivate(urlObj.hostname)) {
+                        if (!res.headersSent) {
+                          res.statusCode = 403;
+                          res.end('Access to internal network is forbidden 喵~');
+                        }
+                        return;
+                      }
+
                       const adapter = url.startsWith('https') ? https.default : http.default;
 
                       const options: any = {
@@ -384,24 +709,14 @@ export default defineConfig(({ mode }) => {
                         // Follow redirects
                         if (proxyRes.statusCode && proxyRes.statusCode >= 300 && proxyRes.statusCode < 400 && proxyRes.headers.location) {
                           let redirectUrl = proxyRes.headers.location;
-                          if (!redirectUrl.startsWith('http')) {
-                            try {
-                              const origin = new URL(targetTemplate).origin;
-                              if (redirectUrl.startsWith('/')) {
-                                redirectUrl = origin + redirectUrl;
-                              } else {
-                                const base = new URL(url);
-                                const pathDir = base.pathname.substring(0, base.pathname.lastIndexOf('/') + 1);
-                                redirectUrl = origin + pathDir + redirectUrl;
-                              }
-                            } catch (e) {
-                              console.error("Redirect URL construction failed", e);
-                              res.statusCode = 500;
-                              res.end("Redirect failed");
-                              return;
-                            }
+                          try {
+                            // 确保 base URL 结尾有斜杠，避免 new URL 拼错喵~
+                            const baseUrl = url.endsWith('/') ? url : url + '/';
+                            redirectUrl = new URL(redirectUrl, baseUrl).href;
+                          } catch (e) {
+                            console.error("[GBK Proxy] Redirect URL resolution failed喵~", e);
                           }
-                          console.log(`[Proxy] Following redirect to: ${redirectUrl}`);
+                          console.log(`[GBK Proxy] Following redirect to: ${redirectUrl}喵~`);
                           performRequest(redirectUrl, 'GET', null, retryCount);
                           return;
                         }
@@ -415,11 +730,17 @@ export default defineConfig(({ mode }) => {
                       });
 
                       proxyReq.on('error', (e: any) => {
-                        console.error("Proxy Request Error:", e);
+                        // 减少冗长的堆栈信息，只记录关键错误喵~
+                        const isNetworkError = ['ECONNRESET', 'ETIMEDOUT', 'ECONNREFUSED', 'ENOTFOUND'].includes(e.code);
+                        if (isNetworkError) {
+                          console.error(`[Proxy Request Error] ${e.code}: ${e.message}`);
+                        } else {
+                          console.error("Proxy Request Error:", e);
+                        }
                         
-                        // Retry on ECONNRESET, ECONNREFUSED or timeout
+                        // Retry on ECONNRESET, ETIMEDOUT or ECONNREFUSED
                         if ((e.code === 'ECONNRESET' || e.code === 'ETIMEDOUT' || e.code === 'ECONNREFUSED') && retryCount < 1) {
-                          console.warn(`Retrying ${url} due to ${e.code}...`);
+                          console.warn(`[Proxy] Retrying ${urlObj.hostname} due to ${e.code}...喵~`);
                           performRequest(url, method, body, retryCount + 1);
                           return;
                         }
@@ -449,8 +770,25 @@ export default defineConfig(({ mode }) => {
             }
 
             // 5. Generic Proxy
-            if (url.pathname === '/api/proxy') {
-              const targetUrl = url.searchParams.get('url');
+            if (url.pathname === '/api/proxy' || url.pathname.startsWith('/proxy/')) {
+              let targetUrl = url.searchParams.get('url');
+              
+              // 适配 /proxy/site/path 格式喵~
+              if (!targetUrl && url.pathname.startsWith('/proxy/')) {
+                const parts = url.pathname.split('/');
+                const site = parts[2];
+                const path = parts.slice(3).join('/');
+                const search = url.search;
+                
+                if (site === 'dingdian') {
+                  targetUrl = `https://www.23ddw.net/${path}${search}`;
+                } else if (site === 'wanbenge') {
+                  targetUrl = `https://www.jizai22.com/${path}${search}`;
+                } else if (site === 'shukuge') {
+                  targetUrl = `https://www.shukuge.com/${path}${search}`;
+                }
+              }
+
               if (!targetUrl) { res.statusCode = 400; res.end('Missing url param'); return; }
 
               // Handle local URLs (already relative to our server)
@@ -471,6 +809,22 @@ export default defineConfig(({ mode }) => {
                     res.end('Invalid target URL');
                     return;
                   }
+
+                  // 安全审计：防止 SSRF 攻击，禁止访问本地敏感地址喵~
+                  const blockedHosts = ['localhost', '127.0.0.1', '0.0.0.0', '::1'];
+                  const isPrivate = (host: string) => {
+                    return blockedHosts.includes(host) || 
+                           host.startsWith('192.168.') || 
+                           host.startsWith('10.') || 
+                           /^172\.(1[6-9]|2[0-9]|3[0-1])\./.test(host);
+                  };
+
+                  if (isPrivate(urlObj.hostname)) {
+                    res.statusCode = 403;
+                    res.end('Access to internal network is forbidden 喵~');
+                    return;
+                  }
+
                   const adapter = targetUrl.startsWith('https') ? https.default : http.default;
 
                   // Filter headers to forward
@@ -513,9 +867,10 @@ export default defineConfig(({ mode }) => {
                   if ([301, 302, 303, 307, 308].includes(proxyRes.statusCode || 0) && proxyRes.headers.location) {
                     let location = proxyRes.headers.location;
                     if (!location.startsWith('http')) {
-                      location = new URL(location, targetUrlObj.href).href;
+                      const baseUrl = targetUrlObj.href.endsWith('/') ? targetUrlObj.href : targetUrlObj.href + '/';
+                      location = new URL(location, baseUrl).href;
                     }
-                    console.log(`[Proxy] Following redirect to: ${location}喵~`);
+                    console.log(`[Generic Proxy] Following redirect to: ${location}喵~`);
                     const nextUrlObj = new URL(location);
                     // Update host header for the next request
                     const nextOptions = { ...currentOptions };
@@ -531,10 +886,16 @@ export default defineConfig(({ mode }) => {
                 });
 
                 proxyReq.on('error', (e: any) => {
-                  console.error("Generic Proxy Error:", e);
+                  const isNetworkError = ['ECONNRESET', 'ETIMEDOUT', 'ECONNREFUSED', 'ENOTFOUND'].includes(e.code);
+                  if (isNetworkError) {
+                    console.error(`[Generic Proxy Error] ${e.code}: ${e.message}`);
+                  } else {
+                    console.error("Generic Proxy Error:", e);
+                  }
+                  
                   if (e.code === 'ECONNRESET' || e.code === 'ECONNREFUSED' || e.code === 'ETIMEDOUT') {
                     if (redirectCount === 0) {
-                      console.warn(`Retrying proxy request due to ${e.code}...`);
+                      console.warn(`[Proxy] Retrying ${targetUrlObj.hostname} due to ${e.code}...喵~`);
                       return makeRequest(targetUrlObj, currentOptions, 1);
                     }
                   }
@@ -640,7 +1001,67 @@ export default defineConfig(({ mode }) => {
                         console.error('[Browser Search] wanbenge manual fallback failed喵~');
                       }
                     }
-                  } else {
+                  } else if (site === 'dingdian') {
+          try {
+            console.log('[Browser Search] dingdian: Starting optimized search喵~');
+            
+            // 方案1: 直接访问搜索URL（更快喵~）
+            // 更新为新接口 /searchsss/
+            const directSearchUrl = `https://www.23ddw.net/searchsss/?searchkey=${encodeURIComponent(keyword)}`;
+            await page.goto(directSearchUrl, { 
+              waitUntil: 'domcontentloaded', 
+              timeout: 15000 
+            });
+            
+            // 智能等待策略喵~
+            await page.waitForFunction(() => {
+              return document.querySelectorAll('.item, .bookbox, dt a, dd a').length > 0 ||
+                     document.querySelector('#nr') ||
+                     document.querySelector('.list') ||
+                     document.body.textContent?.includes('搜索结果');
+            }, { timeout: 10000 }).catch(() => {
+              console.log('智能等待超时，尝试备用选择器喵~');
+            });
+            
+            // 备用等待：确保至少有内容加载喵
+            await new Promise(resolve => setTimeout(resolve, 2000));
+            
+          } catch (e) {
+            console.error('[Browser Search] dingdian direct search failed, trying manual approach喵~', e);
+            
+            // 方案2: 备用方案 - 手动搜索
+            try {
+              await page.goto('https://www.23ddw.net/', { waitUntil: 'domcontentloaded', timeout: 15000 });
+              
+              const searchInputSelector = 'input[name="searchkey"], #searchkey, input[type="text"]';
+              await page.waitForSelector(searchInputSelector, { timeout: 8000 });
+              
+              // 更真实的输入模拟喵~
+              await page.focus(searchInputSelector);
+              await page.type(searchInputSelector, keyword, { delay: 80 + Math.random() * 40 });
+              
+              // 更可靠的提交方式喵
+              await Promise.race([
+                page.keyboard.press('Enter'),
+                page.evaluate((selector) => {
+                  const form = document.querySelector(selector)?.closest('form');
+                  if (form) form.submit();
+                }, searchInputSelector),
+                new Promise(resolve => setTimeout(resolve, 1000))
+              ]);
+              
+              // 更灵活的等待策略喵
+              await Promise.race([
+                page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 10000 }),
+                page.waitForSelector('.item, dt a, .list, #nr', { timeout: 10000 }),
+                new Promise(resolve => setTimeout(resolve, 5000))
+              ]);
+              
+            } catch (fallbackError) {
+              console.error('[Browser Search] dingdian manual search also failed喵~', fallbackError);
+            }
+          }
+        } else {
                     // Generic fallback for other sites
                     const searchPageUrl = searchUrl;
                     try {
@@ -650,193 +1071,225 @@ export default defineConfig(({ mode }) => {
                     }
                   }
 
-                  const finalUrl = page.url();
-                  console.log(`[Browser Search] Final URL: ${finalUrl}喵~`);
+                  let allResults: any[] = [];
+                  let finalUrl = page.url();
 
-                  const results = await page.evaluate((currentSite, kw) => {
-                    console.log(`[Browser Search] Evaluating results for ${currentSite} with keyword: ${kw}`);
-                    const novels: any[] = [];
-                    const kwLower = kw.toLowerCase();
-                    
-                    const isRelevant = (title: string, author: string = '') => {
-                        const t = title.trim().toLowerCase();
-                        const a = author.trim().toLowerCase();
-                        const kwLower = kw.toLowerCase();
-                        const result = t.includes(kwLower) || a.includes(kwLower);
-                        if (!result && (t.length > 0)) {
-                            // console.log(`[Browser Search] Filtered out irrelevant: ${title} by ${author}`);
+                  const scrapePage = async () => {
+                    const pageData = await page.evaluate((currentSite, kw) => {
+                      const novels: any[] = [];
+                      const nextPages: string[] = [];
+                      
+                      const isRelevant = (title: string, author: string = '') => {
+                          const t = title.trim().toLowerCase();
+                          const a = author.trim().toLowerCase();
+                          const kwLower = kw.trim().toLowerCase();
+                          
+                          if (!kwLower) return true;
+                          if (t.includes(kwLower) || a.includes(kwLower)) return true;
+                          
+                          const words = kwLower.split(/\s+/).filter(w => w.length > 0);
+                          if (words.length > 0) {
+                              return words.every(word => t.includes(word) || a.includes(word));
+                          }
+                          return false;
+                      };
+
+                      if (currentSite === 'wanbenge') {
+                        // Strategy 1: .mySearch (Mobile/Alternative view)
+                        const mySearch = document.querySelector('.mySearch');
+                        if (mySearch) {
+                          const uls = mySearch.querySelectorAll('ul');
+                          uls.forEach(ul => {
+                            const link = ul.querySelector('li a') as HTMLAnchorElement; 
+                            if (link) {
+                              const title = link.textContent?.trim() || '';
+                              const author = Array.from(ul.querySelectorAll('li')).find(li => li.textContent?.includes('作者：'))?.textContent?.replace('作者：', '').trim() || '未知';
+                              
+                              if (isRelevant(title, author)) {
+                                  let coverUrl = '';
+                                  const prevDiv = ul.previousElementSibling;
+                                  if (prevDiv && prevDiv.tagName === 'DIV') {
+                                    const img = prevDiv.querySelector('img');
+                                    if (img && !img.src.includes('nocover')) coverUrl = img.src;
+                                  }
+
+                                  if (!novels.some(n => n.detailUrl === link.href)) {
+                                    novels.push({ title, detailUrl: link.href, author, description: '', coverUrl });
+                                  }
+                              }
+                            }
+                          });
+                          
+                          const images = mySearch.querySelectorAll('.image');
+                          images.forEach(imgDiv => {
+                              const link = imgDiv.querySelector('a') as HTMLAnchorElement;
+                              const img = imgDiv.querySelector('img') as HTMLImageElement;
+                              if (link && img) {
+                                  let title = '';
+                                  let author = '未知';
+                                  const dt = imgDiv.nextElementSibling;
+                                  if (dt && dt.tagName === 'DT') {
+                                      const titleLink = dt.querySelector('a');
+                                      if (titleLink) title = titleLink.textContent?.trim() || '';
+                                      const authorSpan = dt.querySelector('span');
+                                      if (authorSpan) author = authorSpan.textContent?.trim() || '未知';
+                                  }
+                                  if (title && isRelevant(title, author) && !novels.some(n => n.detailUrl === link.href)) {
+                                      novels.push({
+                                          title, detailUrl: link.href, author, description: '',
+                                          coverUrl: (img.src && !img.src.includes('nocover')) ? img.src : ''
+                                      });
+                                  }
+                              }
+                          });
                         }
-                        return result;
-                    };
 
-                    if (currentSite === 'wanbenge') {
-                      // Strategy 1: .mySearch (Mobile/Alternative view)
-                      const mySearch = document.querySelector('.mySearch');
-                      if (mySearch) {
-                        const uls = mySearch.querySelectorAll('ul');
-                        uls.forEach(ul => {
-                          const link = ul.querySelector('li a') as HTMLAnchorElement; 
-                          if (link) {
-                            const title = link.textContent?.trim() || '';
-                            const author = Array.from(ul.querySelectorAll('li')).find(li => li.textContent?.includes('作者：'))?.textContent?.replace('作者：', '').trim() || '未知';
-                            
-                            if (isRelevant(title, author)) {
+                        // Strategy 2: .bookbox (Standard view)
+                        const bookboxes = document.querySelectorAll('.bookbox');
+                        if (bookboxes.length > 0) {
+                          bookboxes.forEach(item => {
+                            const link = item.querySelector('.bookname a') as HTMLAnchorElement;
+                            if (link) {
+                              const title = link.textContent?.trim() || '';
+                              const author = item.querySelector('.author')?.textContent?.replace('作者：', '').trim() || '未知';
+                              if (isRelevant(title, author)) {
+                                const existingIndex = novels.findIndex(n => n.detailUrl === link.href);
+                                let newCover = (item.querySelector('.bookimg img') as HTMLImageElement)?.src || '';
+                                if (newCover.includes('nocover')) newCover = '';
+                                
+                                if (existingIndex === -1) {
+                                    novels.push({
+                                      title, detailUrl: link.href, author,
+                                      description: item.querySelector('.update')?.textContent?.replace('简介：', '').trim() || '',
+                                      coverUrl: newCover
+                                    });
+                                } else if (newCover && !novels[existingIndex].coverUrl) {
+                                    novels[existingIndex].coverUrl = newCover;
+                                }
+                              }
+                            }
+                          });
+                        }
+
+                        // Strategy 3: ul.list (Observed on jizai22.com search results)
+                        const listUls = document.querySelectorAll('ul.list');
+                        listUls.forEach(ul => {
+                          const novelLi = Array.from(ul.querySelectorAll('li')).find(li => li.textContent?.includes('小说：'));
+                          const authorLi = Array.from(ul.querySelectorAll('li')).find(li => li.textContent?.includes('作者：'));
+                          
+                          if (novelLi) {
+                            const link = novelLi.querySelector('a') as HTMLAnchorElement;
+                            if (link) {
+                              const title = link.textContent?.trim() || '';
+                              const author = authorLi?.textContent?.replace('作者：', '').trim() || '未知';
+                              
+                              if (isRelevant(title, author) && !novels.some(n => n.detailUrl === link.href)) {
                                 let coverUrl = '';
                                 const prevDiv = ul.previousElementSibling;
-                                if (prevDiv && prevDiv.tagName === 'DIV') {
+                                if (prevDiv) {
                                   const img = prevDiv.querySelector('img');
                                   if (img && !img.src.includes('nocover')) coverUrl = img.src;
                                 }
-
-                                if (!novels.some(n => n.detailUrl === link.href)) {
-                                  novels.push({ title, detailUrl: link.href, author, description: '', coverUrl });
-                                }
-                            }
-                          }
-                        });
-                        
-                        const images = mySearch.querySelectorAll('.image');
-                        images.forEach(imgDiv => {
-                            const link = imgDiv.querySelector('a') as HTMLAnchorElement;
-                            const img = imgDiv.querySelector('img') as HTMLImageElement;
-                            if (link && img) {
-                                let title = '';
-                                let author = '未知';
-                                const dt = imgDiv.nextElementSibling;
-                                if (dt && dt.tagName === 'DT') {
-                                    const titleLink = dt.querySelector('a');
-                                    if (titleLink) title = titleLink.textContent?.trim() || '';
-                                    const authorSpan = dt.querySelector('span');
-                                    if (authorSpan) author = authorSpan.textContent?.trim() || '未知';
-                                }
-                                if (title && isRelevant(title, author) && !novels.some(n => n.detailUrl === link.href)) {
-                                    novels.push({
-                                        title, detailUrl: link.href, author, description: '',
-                                        coverUrl: (img.src && !img.src.includes('nocover')) ? img.src : ''
-                                    });
-                                }
-                            }
-                        });
-                      }
-
-                      // Strategy 2: .bookbox (Standard view)
-                      const bookboxes = document.querySelectorAll('.bookbox');
-                      if (bookboxes.length > 0) {
-                        bookboxes.forEach(item => {
-                          const link = item.querySelector('.bookname a') as HTMLAnchorElement;
-                          if (link) {
-                            const title = link.textContent?.trim() || '';
-                            const author = item.querySelector('.author')?.textContent?.replace('作者：', '').trim() || '未知';
-                            if (isRelevant(title, author)) {
-                              const existingIndex = novels.findIndex(n => n.detailUrl === link.href);
-                              let newCover = (item.querySelector('.bookimg img') as HTMLImageElement)?.src || '';
-                              if (newCover.includes('nocover')) newCover = '';
-                              
-                              if (existingIndex === -1) {
-                                  novels.push({
-                                    title, detailUrl: link.href, author,
-                                    description: item.querySelector('.update')?.textContent?.replace('简介：', '').trim() || '',
-                                    coverUrl: newCover
-                                  });
-                              } else if (newCover && !novels[existingIndex].coverUrl) {
-                                  novels[existingIndex].coverUrl = newCover;
-                              }
-                            }
-                          }
-                        });
-                      }
-
-                      // Strategy 3: ul.list (Observed on jizai22.com search results)
-                      const listUls = document.querySelectorAll('ul.list');
-                      listUls.forEach(ul => {
-                        const novelLi = Array.from(ul.querySelectorAll('li')).find(li => li.textContent?.includes('小说：'));
-                        const authorLi = Array.from(ul.querySelectorAll('li')).find(li => li.textContent?.includes('作者：'));
-                        
-                        if (novelLi) {
-                          const link = novelLi.querySelector('a') as HTMLAnchorElement;
-                          if (link) {
-                            const title = link.textContent?.trim() || '';
-                            const author = authorLi?.textContent?.replace('作者：', '').trim() || '未知';
-                            
-                            if (isRelevant(title, author) && !novels.some(n => n.detailUrl === link.href)) {
-                              let coverUrl = '';
-                              const prevDiv = ul.previousElementSibling;
-                              if (prevDiv) {
-                                const img = prevDiv.querySelector('img');
-                                if (img && !img.src.includes('nocover')) coverUrl = img.src;
-                              }
-                              
-                              novels.push({
-                                title, detailUrl: link.href, author,
-                                description: '',
-                                coverUrl
-                              });
-                            }
-                          }
-                        }
-                      });
-                    }
-
-                    // Generic fallback for all sites if specific strategies failed or to supplement
-                    const genericSelectors = [
-                        '.booklist tr', '.item-list li', '.search-result', '.grid-list .item', 
-                        '.search-list li', '.result-list .item', '.novelslist2 li', '.book-list li',
-                        '.list li', '.book-item', '.bookbox', '.item'
-                    ];
-                    
-                    genericSelectors.forEach(selector => {
-                        const items = document.querySelectorAll(selector);
-                        items.forEach(el => {
-                            // Avoid sidebar/recommendations
-                            if (el.closest('.sidebar, .side, #sidebar, .right, .hot, .recommend')) return;
-
-                            const link = el.querySelector('a[href*="/info/"], a[href*="/book/"]') as HTMLAnchorElement;
-                            if (link) {
-                                const title = link.textContent?.trim() || '';
-                                const author = el.querySelector('.author, .bookauthor, .s4, .item-author, td:nth-child(3)')?.textContent?.replace('作者：', '').trim() || '未知';
                                 
-                                if (title && isRelevant(title, author) && !novels.some(n => n.detailUrl === link.href)) {
-                                    novels.push({
-                                        title,
-                                        detailUrl: link.href,
-                                        author,
-                                        description: el.querySelector('.intro, .item-desc, dd')?.textContent?.trim() || '',
-                                        coverUrl: (el.querySelector('img') as HTMLImageElement)?.src || ''
-                                    });
-                                }
-                            }
-                        });
-                    });
-
-                    // Direct detail page fallback
-                    if (novels.length === 0) {
-                        const isDetailPage = window.location.href.includes('/info/') || 
-                                           window.location.href.includes('/book/') || 
-                                           /\/\d+_\d+\/?$/.test(window.location.href) ||
-                                           /\/\d+\/?$/.test(window.location.href);
-                                           
-                        if (isDetailPage) {
-                            const title = document.querySelector('h1, .bookname h1, .title, .bookTitle, #info h1')?.textContent?.trim();
-                            if (title && isRelevant(title)) {
                                 novels.push({
-                                    title,
-                                    detailUrl: window.location.href,
-                                    author: document.querySelector('.author, .bookauthor, .booktag a.red, #info p:nth-child(2)')?.textContent?.replace('作者：', '').trim() || '未知',
-                                    description: document.querySelector('.intro, .bookintro, #bookIntro, #intro')?.textContent?.trim() || '',
-                                    coverUrl: (document.querySelector('.bookimg img, .pic img, .img-thumbnail, #fmimg img') as HTMLImageElement)?.src || ''
+                                  title, detailUrl: link.href, author,
+                                  description: '',
+                                  coverUrl
                                 });
+                              }
                             }
+                          }
+                        });
+                      }
+
+                      if (currentSite === 'dingdian') {
+                        // 检查是否直接跳到了详情页喵~
+                        const isDetailPage = !!document.querySelector('#fmimg, .book-img, #intro');
+                        if (isDetailPage) {
+                          const title = document.querySelector('h1')?.textContent?.trim() || '';
+                          const author = document.querySelector('#info p, .info p')?.textContent?.match(/作者[：:](.+)/)?.[1]?.trim() || '未知';
+                          const coverImg = document.querySelector('#fmimg img, .book-img img') as HTMLImageElement;
+                          let coverUrl = coverImg ? (coverImg.getAttribute('data-original') || coverImg.src) : '';
+                          if (coverUrl && !coverUrl.startsWith('http')) {
+                            coverUrl = new URL(coverUrl, 'https://www.23ddw.net').href;
+                          }
+                          const description = document.querySelector('#intro, .intro')?.textContent?.trim() || '';
+                          
+                          if (title && isRelevant(title, author)) {
+                            novels.push({ title, detailUrl: window.location.href, author, coverUrl, description });
+                            return { novels, nextPages };
+                          }
                         }
-                    }
-                    
-                    return novels;
-                  }, site, keyword);
+
+                        // 正常的搜索列表解析喵~
+                         const items = document.querySelectorAll('.item, .list-item, tr, #nr');
+                         items.forEach(item => {
+                           let link = item.querySelector('dt a, .image a, a[href*="/du/"]') as HTMLAnchorElement;
+                           if (link) {
+                             let title = link.textContent?.trim() || link.getAttribute('title') || '';
+                             let author = '未知';
+                             const authorEl = item.querySelector('.btm a, .author, td:nth-child(3), .s4, .p2');
+                             if (authorEl) author = authorEl.textContent?.trim().replace('作者：', '') || '未知';
+                             
+                             const imgEl = item.querySelector('.image img, img') as HTMLImageElement;
+                             let coverUrl = '';
+                             if (imgEl) {
+                               // 顶点可能使用 data-original 或 data-src 懒加载喵
+                               coverUrl = imgEl.getAttribute('data-original') || imgEl.getAttribute('data-src') || imgEl.src || '';
+                             }
+                             
+                             if (coverUrl.includes('nocover') || coverUrl.includes('default') || !coverUrl) coverUrl = '';
+                             if (coverUrl && !coverUrl.startsWith('http')) {
+                               coverUrl = new URL(coverUrl, 'https://www.23ddw.net').href;
+                             }
+                             
+                             let desc = item.querySelector('dd, .intro, .item-desc, .update, .p3')?.textContent?.trim() || '';
+                             
+                             // 尝试修复可能的乱码（如果发现典型的 GBK 错认 UTF-8 模式）喵~
+                             const fixGarbled = (str: string) => {
+                               if (!str) return str;
+                               // 如果字符串包含大量特殊字符，尝试修复喵（这里只是简单示例，生产环境需更严谨）
+                               return str;
+                             };
+
+                             if (!novels.some(n => n.detailUrl === link.href)) {
+                               novels.push({
+                                 title: fixGarbled(title), 
+                                 detailUrl: link.href, 
+                                 author: fixGarbled(author),
+                                 description: fixGarbled(desc),
+                                 coverUrl
+                               });
+                             }
+                           }
+                         });
+                       }
+
+                      // Generic fallback...
+                      if (novels.length === 0) {
+                        const items = document.querySelectorAll('.item, .list li, tr');
+                        items.forEach(el => {
+                          const link = el.querySelector('a') as HTMLAnchorElement;
+                          if (link && isRelevant(link.textContent || '')) {
+                            novels.push({ title: link.textContent?.trim(), detailUrl: link.href, author: '未知' });
+                          }
+                        });
+                      }
+
+                      return { novels, nextPages };
+                    }, site, keyword);
+
+                    return pageData;
+                  };
+
+                  const initialData = await scrapePage();
+                  allResults = initialData.novels;
 
                   await browser.close();
-                  console.log(`[Browser Search] Found ${results.length} results`);
+                  console.log(`[Browser Search] Found ${allResults.length} total results`);
 
-                  res.setHeader('Content-Type', 'application/json');
-                  res.end(JSON.stringify({ success: true, searchUrl: finalUrl, results }));
+                  res.setHeader('Content-Type', 'application/json; charset=utf-8');
+                  res.end(JSON.stringify({ success: true, searchUrl: finalUrl, results: allResults }));
                 } catch (error: any) {
                   console.error('[Browser Search] Error:', error);
                   res.statusCode = 500;
@@ -880,25 +1333,22 @@ export default defineConfig(({ mode }) => {
                   await page.setViewport({ width: 375, height: 812, isMobile: true });
                   await page.setUserAgent('Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1');
 
-                  await page.goto(targetUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
+                  await page.goto(targetUrl, { waitUntil: 'networkidle2', timeout: 30000 });
                   console.log(`[Browser Details] Actual URL: ${page.url()}喵~`);
 
-                  // Handle verification page
-                  if (page.url().includes('verify.html')) {
-                    console.log('[Browser Details] Verification page detected, attempting to bypass...喵~');
-                    try {
-                      // Look for a verification button or just wait
-                      const verifyBtn = await page.$('.verify-btn, #btn, .btn, button');
-                      if (verifyBtn) {
-                        await verifyBtn.click();
-                        await page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 5000 }).catch(() => {});
-                      }
-                      // Some sites just need a reload after a delay
-                      await new Promise(resolve => setTimeout(resolve, 2000));
-                      await page.reload({ waitUntil: 'domcontentloaded' });
-                    } catch (e) {
-                      console.warn('[Browser Details] Verification bypass failed:', e);
+                  // 强制检查并修复编码喵
+                  await page.evaluate(() => {
+                    const meta = document.querySelector('meta[charset], meta[http-equiv="Content-Type"]');
+                    if (!meta) {
+                      const newMeta = document.createElement('meta');
+                      newMeta.setAttribute('charset', 'utf-8');
+                      document.head.appendChild(newMeta);
                     }
+                  });
+
+                  // 如果是顶点小说网，尝试等待特定的列表元素喵
+                  if (targetUrl.includes('23ddw.net')) {
+                    await page.waitForSelector('#list, .chapter-list, .section-list, #nr', { timeout: 5000 }).catch(() => {});
                   }
 
                   const content = await page.content();
@@ -911,6 +1361,72 @@ export default defineConfig(({ mode }) => {
                   console.error('[Browser Details] Error:', error);
                   res.statusCode = 500;
                   res.end(JSON.stringify({ error: 'Browser details failed', message: error.message }));
+                }
+              })();
+              return;
+            }
+
+            // 浏览器封面搜索 API 喵~
+            if (url.pathname === '/api/browser-cover') {
+              const title = url.searchParams.get('title');
+              const author = url.searchParams.get('author') || '';
+
+              if (!title) {
+                res.statusCode = 400;
+                res.end(JSON.stringify({ error: 'Missing title' }));
+                return;
+              }
+
+              (async () => {
+                let browser;
+                try {
+                  const puppeteer = await import('puppeteer');
+                  console.log(`[Browser Cover] Searching cover for: ${title} ${author}喵~`);
+
+                  browser = await puppeteer.default.launch({
+                    headless: true,
+                    args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-blink-features=AutomationControlled']
+                  });
+
+                  const page = await browser.newPage();
+                  await page.setViewport({ width: 1280, height: 800 });
+                  await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
+
+                  // 优先尝试豆瓣搜索喵~
+                  const doubanUrl = `https://www.douban.com/search?cat=1001&q=${encodeURIComponent(title + ' ' + author)}`;
+                  await page.goto(doubanUrl, { waitUntil: 'domcontentloaded', timeout: 15000 });
+                  
+                  let coverUrl = await page.evaluate(() => {
+                    const firstResult = document.querySelector('.result-list .result .pic img');
+                    return firstResult ? (firstResult as HTMLImageElement).src : null;
+                  });
+
+                  // 如果豆瓣没找到，尝试百度图片喵~
+                  if (!coverUrl) {
+                    console.log('[Browser Cover] Douban failed, trying Baidu Image喵~');
+                    const baiduUrl = `https://image.baidu.com/search/index?tn=baiduimage&word=${encodeURIComponent(title + ' ' + author + ' 小说 封面')}`;
+                    await page.goto(baiduUrl, { waitUntil: 'domcontentloaded', timeout: 15000 });
+                    await page.waitForSelector('.main_img', { timeout: 5000 }).catch(() => {});
+                    coverUrl = await page.evaluate(() => {
+                      const imgs = Array.from(document.querySelectorAll('.main_img'));
+                      for (const img of imgs) {
+                        const src = (img as HTMLImageElement).src;
+                        if (src && src.startsWith('http') && !src.includes('baidu.com/img')) return src;
+                      }
+                      return null;
+                    });
+                  }
+
+                  await browser.close();
+                  console.log(`[Browser Cover] Result: ${coverUrl ? 'Success喵!' : 'Failed喵~'}`);
+
+                  res.setHeader('Content-Type', 'application/json');
+                  res.end(JSON.stringify({ success: !!coverUrl, coverUrl }));
+                } catch (error: any) {
+                  if (browser) await browser.close();
+                  console.error('[Browser Cover] Error:', error);
+                  res.statusCode = 500;
+                  res.end(JSON.stringify({ success: false, error: error.message }));
                 }
               })();
               return;
