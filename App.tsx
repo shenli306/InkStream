@@ -41,6 +41,7 @@ export default function App() {
   const [searchResults, setSearchResults] = useState<Novel[]>([]);
   const [selectedNovel, setSelectedNovel] = useState<Novel | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [scrollPosition, setScrollPosition] = useState(0);
   
   // Video-related state喵~
   const [videoResults, setVideoResults] = useState<any[]>([]);
@@ -207,12 +208,16 @@ export default function App() {
         // Background enrich: Fetch descriptions (sequentially to avoid overwhelming server)
         (async () => {
           for (const novel of results) {
-            if (novel.description && novel.coverUrl) continue;
+            // 如果小说简介不完整，或者是笔趣阁源（通常需要二次抓取），则进行后台补充
+            const needsEnrich = !novel.description || !novel.coverUrl || novel.sourceName?.includes('笔趣阁');
+            
+            if (!needsEnrich) continue;
+            
             try {
               const details = await getNovelDetails(novel);
               setSearchResults(prev => prev.map(n => n.id === novel.id ? { ...n, ...details } : n));
               // Small delay to be nice to the server
-              await new Promise(r => setTimeout(r, 500));
+              await new Promise(r => setTimeout(r, 200));
             } catch (e) {
               console.warn("Background enrich failed for", novel.title, e);
             }
@@ -227,6 +232,7 @@ export default function App() {
   };
 
   const handleSelectNovel = async (novel: Novel) => {
+    setScrollPosition(window.scrollY);
     setSelectedNovel(novel);
     // Scroll to top
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -263,10 +269,16 @@ export default function App() {
 
       // 1. Get Detailed Metadata & Download Link
       let novelWithLink = selectedNovel;
-      if (!novelWithLink.chapters || novelWithLink.chapters.length === 0) {
+      // Force fetch details if description is missing (likely incomplete data) or chapters are empty
+      if (!novelWithLink.description || !novelWithLink.chapters || novelWithLink.chapters.length === 0) {
         setProgressMessage("正在分析书籍信息...");
         setProgressPercent(5);
-        novelWithLink = await getNovelDetails(selectedNovel);
+        try {
+            novelWithLink = await getNovelDetails(selectedNovel);
+        } catch (e) {
+            console.error("Failed to get details", e);
+            throw new Error("无法获取书籍详情，请稍后重试");
+        }
       }
 
       // 2. Download & Parse
@@ -351,13 +363,26 @@ export default function App() {
         state={state}
         progress={progressPercent}
         message={progressMessage}
-        onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+        onClick={() => {
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+          // 如果不是在忙碌状态，点击灵动岛返回首页/搜索结果
+          if (state === AppState.PREVIEW || state === AppState.COMPLETE || state === AppState.IDLE) {
+            setSelectedNovel(null);
+            if (state === AppState.COMPLETE) {
+              setState(AppState.PREVIEW);
+            }
+          }
+        }}
       />
 
       {/* Back Button */}
       {selectedNovel && (
         <button
-          onClick={() => { setSelectedNovel(null); setState(AppState.PREVIEW); }}
+          onClick={() => { 
+            setSelectedNovel(null); 
+            setState(AppState.PREVIEW); 
+            setTimeout(() => window.scrollTo({ top: scrollPosition, behavior: 'smooth' }), 50);
+          }}
           className="fixed top-6 left-6 z-40 p-3 bg-black/20 backdrop-blur-xl rounded-full text-white/80 hover:bg-white/10 transition-all border border-white/10 hover:scale-110 active:scale-95 group"
           title="返回搜索"
         >
@@ -480,7 +505,11 @@ export default function App() {
                     <CuteProgress state={state} progress={progressPercent} message={progressMessage} />
                   )}
                   <button
-                    onClick={() => { setSelectedNovel(null); setState(AppState.PREVIEW); }}
+                    onClick={() => { 
+                      setSelectedNovel(null); 
+                      setState(AppState.PREVIEW); 
+                      setTimeout(() => window.scrollTo({ top: scrollPosition, behavior: 'smooth' }), 50);
+                    }}
                     className="mt-4 text-white/40 text-sm hover:text-white hover:underline transition-all"
                   >
                     返回搜索结果

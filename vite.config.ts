@@ -1222,7 +1222,10 @@ export default defineConfig(({ mode }) => {
                             if (isRelevant(title, author)) {
                                const img = item.querySelector('.bookimg img') as HTMLImageElement;
                                const coverUrl = img ? img.src : '';
-                               const description = item.querySelector('.update')?.innerText?.replace('简介：', '').trim() || '';
+                               // 尝试从 .update 或 .intro 或 .uptime 提取简介
+                               let description = item.querySelector('.update')?.innerText?.replace('简介：', '').trim() || 
+                                                 item.querySelector('.intro')?.innerText?.replace('简介：', '').trim() || 
+                                                 item.querySelector('.uptime')?.innerText?.replace('简介：', '').trim() || '';
                                
                                if (!novels.some(n => n.detailUrl === link.href)) {
                                  novels.push({
@@ -1383,7 +1386,12 @@ export default defineConfig(({ mode }) => {
                     await page.waitForSelector('#list, .chapter-list, .section-list, #nr', { timeout: 5000 }).catch(() => {});
                   }
                   if (targetUrl.includes('bqgui.cc')) {
-                    await page.waitForSelector('#list, .listmain, #content, #chaptercontent', { timeout: 8000 }).catch(() => {});
+                    try {
+                      await page.waitForSelector('#list, .listmain, #content, #chaptercontent', { timeout: 15000 });
+                      console.log('[Browser Details] bqgui selector found喵~');
+                    } catch (e) {
+                      console.log('[Browser Details] bqgui selector timeout喵~');
+                    }
                   }
 
                   const content = await page.content();

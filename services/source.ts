@@ -1171,13 +1171,28 @@ const shukugeProvider: SourceProvider = {
         coverUrl = `${SHUKUGE_URL}${coverUrl}`;
       }
       
+      // 优化简介提取逻辑
+      let description = "";
+      const descEl = item.querySelector('.bookdesc .desc:last-child') || item.querySelector('.bookdesc');
+      if (descEl) {
+          const text = descEl.textContent || "";
+          if (text.includes('简介：')) {
+              description = text.split('简介：')[1].trim();
+          } else if (text.includes('简介:')) {
+              description = text.split('简介:')[1].trim();
+          } else {
+              // 如果没有明显前缀，尝试移除作者等元数据后作为简介
+              description = text.replace(/作者：.*分类：.*/, '').trim();
+          }
+      }
+      
       if (isRelevant(title, author, keyword)) {
         results.push({
           id: href,
           title,
           author,
           coverUrl,
-          description: item.querySelector('.bookdesc')?.textContent?.split('简介：')[1]?.trim() || "",
+          description,
           tags: [],
           status: 'Unknown',
           detailUrl: href.startsWith('http') ? href : `${SHUKUGE_URL}${href}`,
@@ -1736,7 +1751,7 @@ const bqguiProvider: SourceProvider = {
         if (src) novel.coverUrl = src.startsWith('http') ? src : new URL(src, novel.detailUrl).href;
     }
     
-    // Description
+    // 提取简介
     const descEl = doc.querySelector('.intro') || doc.querySelector('.bookintro') || doc.querySelector('#intro');
     if (descEl) novel.description = descEl.textContent?.trim() || novel.description;
     
@@ -1746,11 +1761,14 @@ const bqguiProvider: SourceProvider = {
     
     // Try multiple selectors for chapter list
     const listContainers = doc.querySelectorAll('#list dl, .listmain dl, .chapter-list');
+    console.log(`[Bqgui] Found ${listContainers.length} list containers喵~`);
     let foundChapters = false;
 
-    listContainers.forEach(container => {
+    listContainers.forEach((container, idx) => {
         if (foundChapters) return;
-        const links = container.querySelectorAll('dd a, li a');
+        const links = container.querySelectorAll('dd a, dt a');
+        console.log(`[Bqgui] Container ${idx} has ${links.length} links喵~`);
+        
         if (links.length > 0) {
             links.forEach((a, index) => {
                 const href = a.getAttribute('href');
@@ -1771,6 +1789,44 @@ const bqguiProvider: SourceProvider = {
         }
     });
 
+    // 兜底策略：如果常规容器没找到，尝试全局正则匹配章节链接喵~
+    if (chapters.length === 0) {
+        console.log("[Bqgui] No chapters in containers, trying global link search喵~");
+        const allLinks = doc.querySelectorAll('a');
+        const bookIdMatch = novel.detailUrl.match(/\/book\/(\d+)/);
+        const bookId = bookIdMatch ? bookIdMatch[1] : null;
+
+        allLinks.forEach(a => {
+            const href = a.getAttribute('href');
+            const title = a.textContent?.trim();
+            
+            // 匹配规则：必须是 .html 结尾，且不是 index.html
+            // 如果能提取到 bookId，则链接必须包含 bookId
+            if (href && href.endsWith('.html') && !href.endsWith('index.html') && title) {
+                let isChapter = false;
+                
+                if (bookId && href.includes(bookId)) {
+                    isChapter = true;
+                } else if (href.match(/\/\d+\/\d+\.html$/)) {
+                    // 通用格式 /123/456.html
+                    isChapter = true;
+                }
+
+                if (isChapter) {
+                    const fullUrl = href.startsWith('http') ? href : new URL(href, novel.detailUrl).href;
+                    if (!seenUrls.has(fullUrl)) {
+                        seenUrls.add(fullUrl);
+                        chapters.push({
+                            number: chapters.length + 1,
+                            title,
+                            url: fullUrl
+                        });
+                    }
+                }
+            }
+        });
+    }
+
     if (chapters.length === 0) throw new Error("未找到章节列表喵~");
     
     return { ...novel, chapters };
@@ -1784,6 +1840,7 @@ const bqguiProvider: SourceProvider = {
          
          if (data.success && data.html) {
              const doc = parseHTML(data.html);
+             // 笔趣阁的内容可能在 #chaptercontent 或 #content 中
              const contentEl = doc.querySelector('#chaptercontent') || doc.querySelector('#content') || doc.querySelector('.content') || doc.querySelector('.read-content');
              
              if (contentEl) {
@@ -1796,7 +1853,25 @@ const bqguiProvider: SourceProvider = {
                  
                  const tempDiv = document.createElement('div');
                  tempDiv.innerHTML = text;
-                 return tempDiv.textContent?.trim() || "";
+                 let cleanText = tempDiv.textContent?.trim() || "";
+
+                 // 如果内容为空，尝试直接从 body 获取（针对某些反爬情况）
+                 if (!cleanText) {
+                    const bodyText = doc.body.textContent || "";
+                    // 尝试截取“上一章”和“下一章”之间的内容
+                    const startMarker = "上一章";
+                    const endMarker = "下一章";
+                    const startIndex = bodyText.indexOf(startMarker);
+                    const endIndex = bodyText.lastIndexOf(endMarker);
+                    
+                    if (startIndex !== -1 && endIndex !== -1 && endIndex > startIndex) {
+                        cleanText = bodyText.substring(startIndex + startMarker.length, endIndex).trim();
+                        // 进一步清理可能包含的导航文字
+                        cleanText = cleanText.replace(/目录|加入书签|投票推荐/g, '').trim();
+                    }
+                 }
+                 
+                 return cleanText;
              }
          }
      } catch (e) {
