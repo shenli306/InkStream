@@ -9,12 +9,13 @@ const SHIJIEMINGZHU_URL = "https://www.shijiemingzhu.com";
 const SHUKUGE_URL = "http://www.shukuge.com";
 const DINGDIAN_URL = "https://www.23ddw.net";
 const BQGUI_URL = "https://www.bqgui.cc";
+const XPXS_URL = "https://www.xpxs.net";
 
 // 搜索缓存喵~ 5分钟过期时间
 const searchCache = new Map<string, { results: Novel[]; timestamp: number }>();
 const CACHE_DURATION = 5 * 60 * 1000; // 5分钟喵~
 
-type SourceKey = 'wanbenge' | 'local' | 'yeduji' | 'shukuge' | 'dingdian' | 'bqgui';
+type SourceKey = 'wanbenge' | 'local' | 'yeduji' | 'shukuge' | 'dingdian' | 'bqgui' | 'xpxs';
 
 const parseHTML = (html: string) => new DOMParser().parseFromString(html, "text/html");
 
@@ -449,6 +450,19 @@ const proxifyImage = (url: string) => {
   }
 
   return `/api/proxy?url=${encodeURIComponent(url)}`;
+};
+
+const isPlaceholderCoverUrl = (url: string) => {
+  if (!url) return true;
+  let decoded = url;
+  try {
+    decoded = decodeURIComponent(url);
+  } catch {
+  }
+  const lower = decoded.toLowerCase();
+  return lower.includes('nocover') || lower.includes('no-cover') || lower.includes('nopic') ||
+    lower.includes('noimage') || lower.includes('default') || lower.includes('placeholder') ||
+    decoded.includes('暂无封面');
 };
 
 const wanbengeProvider: SourceProvider = {
@@ -923,7 +937,7 @@ export const fetchCoverFromOtherSources = async (novel: Novel): Promise<string |
       const results = await provider.search(novel.title);
       const match = results.find(n => n.title === novel.title && 
         (n.author.includes(novel.author) || novel.author.includes(n.author) || n.author === '未知' || novel.author === '未知'));
-      if (match && match.coverUrl && !match.coverUrl.includes('nocover')) {
+      if (match && match.coverUrl && !isPlaceholderCoverUrl(match.coverUrl)) {
         return match.coverUrl;
       }
     } catch (e) {
@@ -2070,7 +2084,380 @@ const bqguiProvider: SourceProvider = {
   }
 };
 
-export const PROVIDERS: SourceProvider[] = [wanbengeProvider, yedujiProvider, shukugeProvider, dingdianProvider, bqguiProvider, localProvider];
+const xpxsProvider: SourceProvider = {
+  key: 'xpxs',
+  name: '虾皮小说',
+  baseUrl: XPXS_URL,
+  search: async (keyword: string): Promise<Novel[]> => {
+    console.log(`[Xpxs] Searching for: ${keyword}喵~`);
+    const searchUrl = `${XPXS_URL}/search/?searchkey=${encodeURIComponent(keyword)}`;
+    const html = await fetchText(searchUrl);
+    const doc = parseHTML(html);
+    const results: Novel[] = [];
+    
+    // 虾皮小说的搜索结果通常在 dl 列表中
+    const dls = doc.querySelectorAll('dl');
+    console.log(`[Xpxs] Found ${dls.length} dl elements喵~`);
+
+    dls.forEach(dl => {
+        try {
+            const titleEl = dl.querySelector('dt a');
+            if (!titleEl) return;
+            
+            const title = titleEl.textContent?.trim() || "";
+            let href = titleEl.getAttribute('href') || "";
+            if (href && !href.startsWith('http')) {
+                href = `${XPXS_URL}${href}`;
+            }
+            
+            const coverEl = dl.querySelector('img');
+            let coverUrl = coverEl?.getAttribute('data-original') || coverEl?.getAttribute('src') || "";
+            if (coverUrl && !coverUrl.startsWith('http')) {
+                coverUrl = `${XPXS_URL}${coverUrl}`;
+            }
+            if (isPlaceholderCoverUrl(coverUrl)) coverUrl = "";
+            
+            // 第二个 dd 通常是作者信息，包含链接
+            const dds = dl.querySelectorAll('dd');
+            let author = "未知";
+            let description = "";
+            
+            if (dds.length > 0) {
+                // 第一个 dd 是简介
+                description = dds[0].textContent?.trim() || "";
+            }
+            
+            if (dds.length > 1) {
+                // 第二个 dd 包含作者
+                const authorEl = dds[1].querySelector('a');
+                if (authorEl) {
+                    author = authorEl.textContent?.trim() || "未知";
+                } else {
+                    // 尝试从文本提取
+                    const text = dds[1].textContent || "";
+                    // 假设格式为 "作者：xxx" 或直接是作者名
+                    author = text.split(/\s+/)[0] || "未知";
+                }
+            }
+            
+            if (isRelevant(title, author, keyword)) {
+                results.push({
+                    id: href,
+                    title,
+                    author,
+                    coverUrl: proxifyImage(coverUrl),
+                    description,
+                    tags: [],
+                    status: 'Unknown',
+                    detailUrl: href,
+                    chapters: [],
+                    sourceName: '虾皮小说'
+                });
+            }
+        } catch (e) {
+            console.warn(`[Xpxs] Error parsing search result:`, e);
+        }
+    });
+    
+    return results;
+  },
+  getDetails: async (novel: Novel): Promise<Novel> => {
+    console.log(`[Xpxs] Getting details for: ${novel.title}喵~`);
+    let html = "";
+    try {
+        html = await fetchText(novel.detailUrl, undefined, 'utf-8');
+        if (html.includes("charset=gb") || html.includes("charset=\"gb") || html.includes('琚')) {
+            html = await fetchText(novel.detailUrl, undefined, 'gb18030');
+        }
+        if (html.length < 500) {
+            throw new Error("Content too short");
+        }
+    } catch (e) {
+        try {
+            const browserDetailsUrl = `/api/browser-details?url=${encodeURIComponent(novel.detailUrl)}`;
+            const response = await fetch(browserDetailsUrl);
+            const data = await response.json();
+            if (data.success && data.html) {
+                html = data.html;
+            } else {
+                throw new Error("Browser fallback failed");
+            }
+        } catch (browserError) {
+            console.error("[Xpxs] Detail fetch failed", browserError);
+            throw new Error("无法获取小说详情喵~");
+        }
+    }
+    const doc = parseHTML(html);
+    
+    // 提取封面
+    const imgEl = doc.querySelector('.book-img img') || doc.querySelector('.cover img') || doc.querySelector('img.lazy');
+    let coverUrl = imgEl?.getAttribute('data-original') || imgEl?.getAttribute('src') || novel.coverUrl;
+    if (coverUrl && !coverUrl.startsWith('http')) {
+        coverUrl = `${XPXS_URL}${coverUrl}`;
+    }
+    if (isPlaceholderCoverUrl(coverUrl)) coverUrl = "";
+    
+    const statusCandidates = Array.from(doc.querySelectorAll('.bookdes p, .bookinfo p, .bookdes span, .bookinfo span'))
+        .map(el => el.textContent?.trim() || '')
+        .filter(Boolean);
+    const statusText = statusCandidates.find(text => text.includes('小说状态'));
+    if (statusText) {
+        const normalized = statusText.replace('小说状态：', '').replace('小说状态:', '').trim();
+        if (normalized.includes('完结')) {
+            novel.status = 'Completed';
+        } else if (normalized.includes('连载')) {
+            novel.status = 'Serializing';
+        }
+    }
+    
+    // 提取简介
+    const introEl = doc.querySelector('.book-intro') || doc.querySelector('.intro') || doc.querySelector('#intro');
+    let description = introEl?.textContent?.trim() || novel.description;
+    
+    // 提取目录链接 (通常是 /index/id/)
+    // 详情页可能有 "目录首页" 链接
+    const indexLink = doc.querySelector('a[rel="index"]') || Array.from(doc.querySelectorAll('a')).find(a => a.textContent?.includes('目录'));
+    let tocUrl = "";
+    if (indexLink) {
+        const href = indexLink.getAttribute('href');
+        if (href) {
+            tocUrl = href.startsWith('http') ? href : `${XPXS_URL}${href}`;
+        }
+    }
+    
+    // 如果没找到目录链接，尝试根据 ID 猜测
+    // 假设 detailUrl 是 /book/123/，tocUrl 可能是 /index/123/
+    if (!tocUrl && novel.detailUrl.includes('/book/')) {
+        tocUrl = novel.detailUrl.replace('/book/', '/index/');
+    }
+    
+    console.log(`[Xpxs] TOC URL: ${tocUrl}喵~`);
+    
+    const chapters: Chapter[] = [];
+    
+    if (tocUrl) {
+        const fetchTocHtml = async (url: string) => {
+            let tocHtml = "";
+            try {
+                tocHtml = await fetchText(url, undefined, 'utf-8');
+                if (tocHtml.includes("charset=gb") || tocHtml.includes("charset=\"gb") || tocHtml.includes('琚')) {
+                    tocHtml = await fetchText(url, undefined, 'gb18030');
+                }
+                if (tocHtml.length < 500) {
+                    throw new Error("Content too short");
+                }
+            } catch (e) {
+                try {
+                    const browserDetailsUrl = `/api/browser-details?url=${encodeURIComponent(url)}`;
+                    const response = await fetch(browserDetailsUrl);
+                    const data = await response.json();
+                    if (data.success && data.html) {
+                        tocHtml = data.html;
+                    }
+                } catch (browserError) {
+                    console.warn(`[Xpxs] Browser TOC fetch failed for ${url}:`, browserError);
+                }
+            }
+            return tocHtml;
+        };
+        const tocHtml = await fetchTocHtml(tocUrl);
+        const tocDoc = parseHTML(tocHtml);
+        
+        // 检查分页
+        const select = tocDoc.querySelector('#indexselect') as HTMLSelectElement;
+        const pageUrls: string[] = [tocUrl];
+        
+        if (select && select.options.length > 1) {
+             console.log(`[Xpxs] Found ${select.options.length} TOC pages喵~`);
+             // 获取所有分页链接
+             for (let i = 0; i < select.options.length; i++) {
+                 const val = select.options[i].value;
+                 if (val) {
+                     const url = val.startsWith('http') ? val : `${XPXS_URL}${val}`;
+                     if (!pageUrls.includes(url)) {
+                         pageUrls.push(url);
+                     }
+                 }
+             }
+        }
+        
+        // 并发获取所有目录页 (限制并发数为 5)
+        const limit = pLimit(5);
+        const fetchTocPage = async (url: string) => {
+             try {
+                 const pageHtml = await fetchTocHtml(url);
+                 const pageDoc = parseHTML(pageHtml);
+                 // 添加 .chapterlist-index li a 选择器喵~
+                 const links = pageDoc.querySelectorAll('.chapterlist dd a, .chapterlist li a, .listmain a, .read_list a, #list dd a, .book-chapter-list a, .chapterlist-index li a');
+                 const pageChapters: Chapter[] = [];
+                 
+                 links.forEach(link => {
+                     const href = link.getAttribute('href');
+                     const title = link.textContent?.trim();
+                     if (href && title) {
+                         const fullUrl = href.startsWith('http') ? href : `${XPXS_URL}${href}`;
+                         pageChapters.push({
+                             number: 0, // 暂时设为0，最后统一编号
+                             title,
+                             url: fullUrl
+                         });
+                     }
+                 });
+                 return pageChapters;
+             } catch (e) {
+                 console.warn(`[Xpxs] Failed to fetch TOC page ${url}:`, e);
+                 return [];
+             }
+        };
+        
+        const allPagesChapters = await Promise.all(pageUrls.map(url => limit(() => fetchTocPage(url))));
+        
+        // 展平并去重
+        const seenUrls = new Set<string>();
+        allPagesChapters.flat().forEach(c => {
+            if (!seenUrls.has(c.url)) {
+                seenUrls.add(c.url);
+                c.number = chapters.length + 1;
+                chapters.push(c);
+            }
+        });
+    }
+    
+    if (chapters.length === 0) {
+         // Fallback: 尝试直接从详情页提取（如果是单页目录）
+         // 同样添加 .chapterlist-index li a 选择器喵~
+         const links = doc.querySelectorAll('.chapterlist dd a, .chapterlist li a, .listmain a, .read_list a, #list dd a, .chapterlist-index li a');
+         links.forEach((link, idx) => {
+             const href = link.getAttribute('href');
+             const title = link.textContent?.trim();
+             if (href && title) {
+                 const fullUrl = href.startsWith('http') ? href : `${XPXS_URL}${href}`;
+                 chapters.push({
+                     number: idx + 1,
+                     title,
+                     url: fullUrl
+                 });
+             }
+         });
+    }
+
+    if (chapters.length === 0) throw new Error("未找到章节列表喵~");
+
+    return {
+        ...novel,
+        coverUrl: proxifyImage(coverUrl),
+        description,
+        chapters,
+        sourceName: '虾皮小说'
+    };
+  },
+  getChapterContent: async (chapter: Chapter): Promise<string> => {
+    const fetchChapterHtml = async (url: string) => {
+        let html = "";
+        try {
+            html = await fetchText(url, undefined, 'utf-8');
+            if (html.includes("charset=gb") || html.includes("charset=\"gb") || html.includes('琚')) {
+                html = await fetchText(url, undefined, 'gb18030');
+            }
+            if (html.length < 500) {
+                throw new Error("Content too short");
+            }
+            return html;
+        } catch (e) {
+            try {
+                const browserDetailsUrl = `/api/browser-details?url=${encodeURIComponent(url)}`;
+                const response = await fetch(browserDetailsUrl);
+                const data = await response.json();
+                if (data.success && data.html) {
+                    return data.html;
+                }
+            } catch (browserError) {
+            }
+        }
+        throw new Error("无法获取章节内容喵~");
+    };
+
+    const fetchContentRecursively = async (url: string, visited: Set<string> = new Set()): Promise<string> => {
+        if (visited.has(url)) return "";
+        visited.add(url);
+        
+        console.log(`[Xpxs] Fetching chapter content: ${url}喵~`);
+        const html = await fetchChapterHtml(url);
+        const doc = parseHTML(html);
+        
+        const contentEl = doc.querySelector('#content') || doc.querySelector('.content') || doc.querySelector('#chaptercontent') || doc.querySelector('.read-content');
+        if (!contentEl) throw new Error("未找到章节内容喵~");
+        
+        // 检查下一页 (在清理 DOM 之前先查找，防止被误删喵~)
+        // 通常是 "下一页" 链接
+        const nextLink = Array.from(doc.querySelectorAll('a')).find(a => a.textContent?.includes('下一页'));
+        
+        const tempDiv = document.createElement('div');
+        tempDiv.innerHTML = contentEl.innerHTML;
+        tempDiv.querySelectorAll('script, style, ins, .ads, .ad, .advertisement').forEach(el => el.remove());
+        let text = tempDiv.innerHTML
+            .replace(/<br\s*\/?>/gi, '\n')
+            .replace(/<p[^>]*>/gi, '')
+            .replace(/<\/p>/gi, '\n')
+            .replace(/&nbsp;/g, ' ')
+            .replace(/&lt;/g, '<')
+            .replace(/&gt;/g, '>')
+            .replace(/&amp;/g, '&')
+            .trim();
+        const cleanDiv = document.createElement('div');
+        cleanDiv.innerHTML = text;
+        let cleanText = cleanDiv.textContent || "";
+        const noiseTokens = ['虾皮小说', 'www.xpxs.net', 'xpxs.net', 'https://www.xpxs.net'];
+        const normalizeLine = (line: string) => {
+            let out = line.replace(/\u00a0/g, ' ');
+            noiseTokens.forEach(token => {
+                out = out.split(token).join('');
+            });
+            return out.trim();
+        };
+        cleanText = cleanText
+            .split('\n')
+            .map(normalizeLine)
+            .filter(line => line.length > 0)
+            .join('\n\n');
+        if (!cleanText || cleanText.trim().length < 20) {
+            const fallbackText = contentEl.textContent || "";
+            const lines = fallbackText
+                .split('\n')
+                .map(normalizeLine)
+                .filter(line => line.length > 0);
+            cleanText = lines.join('\n\n').trim();
+        }
+        if (!cleanText || cleanText.trim().length < 20) {
+            const bodyText = doc.body.textContent || "";
+            const lines = bodyText.split('\n')
+                .map(normalizeLine)
+                .filter(line => line.length > 0);
+            cleanText = lines.join('\n\n').trim();
+        }
+            
+        if (nextLink) {
+            const nextHref = nextLink.getAttribute('href');
+            if (nextHref) {
+                const nextUrl = nextHref.startsWith('http') ? nextHref : `${XPXS_URL}${nextHref}`;
+                // 只有当下一页是当前章节的分页时才继续 (通常文件名包含 _2, _3 或在同一目录)
+                // 简单判断：如果不是 "下一章" 的链接。通常 "下一章" 会有明确的文本或 ID 变化大。
+                // 虾皮小说分页通常是 chapter_2.html
+                if (nextUrl.includes('_') || !nextLink.textContent?.includes('章')) {
+                     const nextContent = await fetchContentRecursively(nextUrl, visited);
+                     return cleanText + "\n\n" + nextContent;
+                }
+            }
+        }
+        
+        return cleanText;
+    };
+    
+    return await fetchContentRecursively(chapter.url);
+  }
+};
+
+export const PROVIDERS: SourceProvider[] = [wanbengeProvider, yedujiProvider, shukugeProvider, dingdianProvider, bqguiProvider, xpxsProvider, localProvider];
 
 export const searchNovel = async (keyword: string, source: any = 'auto'): Promise<Novel[]> => {
   // Check if keyword is a URL
@@ -2185,6 +2572,7 @@ const getProviderByName = (name: string): SourceProvider | undefined => {
   if (name.includes('书库阁')) return shukugeProvider;
   if (name.includes('顶点小说网')) return dingdianProvider;
   if (name.includes('笔趣阁(GUI)')) return bqguiProvider;
+  if (name.includes('虾皮小说')) return xpxsProvider;
   return undefined;
 };
 

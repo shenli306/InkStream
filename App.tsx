@@ -35,6 +35,31 @@ const PhotoModal = ({ photo, onClose }: { photo: any, onClose: () => void }) => 
   );
 };
 
+const isPlaceholderCoverUrl = (url?: string | null) => {
+  if (!url) return true;
+  let decoded = url;
+  try {
+    decoded = decodeURIComponent(url);
+  } catch {
+  }
+  const lower = decoded.toLowerCase();
+  return lower.includes('nocover') || lower.includes('no-cover') || lower.includes('nopic') ||
+    lower.includes('noimage') || lower.includes('default') || lower.includes('placeholder') ||
+    decoded.includes('暂无封面');
+};
+
+const resolveCoverUrl = (url?: string | null) => {
+  if (!url || isPlaceholderCoverUrl(url)) return null;
+  if (url.startsWith('/api/')) return url;
+  try {
+    const isLocalDev = window.location.hostname === 'localhost' && window.location.protocol === 'http:';
+    if (isLocalDev) return url;
+  } catch {
+  }
+  if (url.startsWith('http')) return `/api/proxy?url=${encodeURIComponent(url)}`;
+  return url;
+};
+
 export default function App() {
   const [query, setQuery] = useState('');
   const [state, setState] = useState<AppState>(AppState.IDLE);
@@ -61,6 +86,7 @@ export default function App() {
   const [photoPage, setPhotoPage] = useState(1);
   const [photoHasMore, setPhotoHasMore] = useState(false);
   const [selectedPhoto, setSelectedPhoto] = useState<any>(null);
+  const resolvedCoverUrl = resolveCoverUrl(selectedNovel?.coverUrl);
 
   const fetchVideos = async (page: number, sort: 'desc' | 'asc', isLoadMore = false) => {
     setIsVideoLoading(true);
@@ -479,19 +505,9 @@ export default function App() {
                 {/* Cover Mockup */}
                 <div className="w-full md:w-1/3 flex flex-col items-center">
                   <div className="w-48 aspect-[2/3] bg-gradient-to-br from-indigo-900 to-slate-900 rounded-xl shadow-2xl flex items-center justify-center border border-white/10 mb-8 relative overflow-hidden group">
-                    {selectedNovel.coverUrl ? (
+                    {resolvedCoverUrl ? (
                       <img 
-                        src={(() => {
-                          const coverUrl = selectedNovel.coverUrl;
-                          if (coverUrl.startsWith('/api/')) return coverUrl;
-                          try {
-                            const isLocalDev = window.location.hostname === 'localhost' && window.location.protocol === 'http:';
-                            if (isLocalDev) return coverUrl;
-                          } catch {
-                          }
-                          if (coverUrl.startsWith('http')) return `/api/proxy?url=${encodeURIComponent(coverUrl)}`;
-                          return coverUrl;
-                        })()} 
+                        src={resolvedCoverUrl} 
                         alt={selectedNovel.title} 
                         className="w-full h-full object-cover" 
                       />

@@ -8,10 +8,24 @@ interface BookCardProps {
 }
 
 export const BookCard: React.FC<BookCardProps> = ({ novel, onSelect }) => {
-  // Fix relative URLs for images if they exist
-  const coverUrl = novel.coverUrl
-    ? (novel.coverUrl.startsWith('http') || novel.coverUrl.startsWith('/api/') ? novel.coverUrl : `https://m.qishu99.cc${novel.coverUrl}`)
-    : null;
+  const normalizeCoverUrl = (url?: string | null) => {
+    if (!url) return null;
+    let decoded = url;
+    try {
+      decoded = decodeURIComponent(url);
+    } catch {
+    }
+    const lower = decoded.toLowerCase();
+    if (lower.includes('nocover') || lower.includes('no-cover') || lower.includes('nopic') ||
+      lower.includes('noimage') || lower.includes('default') || lower.includes('placeholder') ||
+      decoded.includes('暂无封面')) {
+      return null;
+    }
+    if (url.startsWith('http') || url.startsWith('/api/')) return url;
+    return `https://m.qishu99.cc${url}`;
+  };
+
+  const coverUrl = normalizeCoverUrl(novel.coverUrl);
 
   return (
     <div
