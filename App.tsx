@@ -469,7 +469,7 @@ export default function App() {
                   type="text"
                   value={query}
                   onChange={e => setQuery(e.target.value)}
-                  placeholder="输入小说名或搜索 URL，例如：小哭包..."
+                  placeholder="输入小说名"
                   className="w-full bg-transparent border-none outline-none px-4 py-4 text-lg text-white placeholder:text-white/20 font-medium"
                 />
 
