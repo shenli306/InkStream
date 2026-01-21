@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import { AppState } from '../types';
 
 interface CuteProgressProps {
@@ -6,14 +6,6 @@ interface CuteProgressProps {
     progress: number;
     message: string;
 }
-
-const KAOMOJI = {
-    [AppState.ANALYZING]: ['( ◕ 💧 ◕ )', '(◕ ᴥ ◕)', '(｡•́︿•̀｡)', '(o_ _)o'],
-    [AppState.DOWNLOADING]: ['( 🏃 💨 )', '(ง •̀_•́)ง', '( ᕦ ᕤ )', '(>_<)'],
-    [AppState.PARSING]: ['( ✂️ ヮ ✂️ )', '( 📖 ヮ 📖 )', '( 🤓 )', '(・_・)'],
-    [AppState.PACKING]: ['( 🎁 ヮ 🎁 )', '(つ ✨ ヮ ✨ )つ', '( 📦 )', '(ﾉ^ヮ^)ﾉ*:･ﾟ✧'],
-    default: ['(・ω・)', '(◕‿◕)', '(｡･ω･｡)']
-};
 
 const COLORS = {
     [AppState.ANALYZING]: 'text-cyan-400',
@@ -24,24 +16,6 @@ const COLORS = {
 };
 
 export const CuteProgress: React.FC<CuteProgressProps> = ({ state, progress, message }) => {
-    const [emojiIndex, setEmojiIndex] = useState(0);
-    const [bounce, setBounce] = useState(false);
-
-    useEffect(() => {
-        // Rotate emojis every 1.5s
-        const interval = setInterval(() => {
-            setEmojiIndex(prev => prev + 1);
-            setBounce(true);
-            setTimeout(() => setBounce(false), 500);
-        }, 1500);
-        return () => clearInterval(interval);
-    }, [state]);
-
-    const getKaomoji = () => {
-        const list = KAOMOJI[state as keyof typeof KAOMOJI] || KAOMOJI.default;
-        return list[emojiIndex % list.length];
-    };
-
     const getColor = () => COLORS[state as keyof typeof COLORS] || COLORS.default;
 
     return (
@@ -53,9 +27,13 @@ export const CuteProgress: React.FC<CuteProgressProps> = ({ state, progress, mes
                         'from-indigo-500/0 via-indigo-500 to-indigo-500/0'
                 } translate-x-[-100%] group-hover:translate-x-[100%] animate-[shimmer_3s_infinite]`}></div>
 
-            {/* Kaomoji Container */}
-            <div className={`text-5xl md:text-6xl mb-4 font-black transition-all duration-300 ${getColor()} ${bounce ? 'scale-125 -translate-y-2' : 'scale-100'}`}>
-                {getKaomoji()}
+            {/* Anime Girl GIF 喵~ */}
+            <div className="relative w-48 h-48 mb-2 transition-transform duration-300 hover:scale-110">
+                <img 
+                    src="/loading-girl.gif" 
+                    alt="Loading..." 
+                    className="w-full h-full object-contain drop-shadow-[0_0_15px_rgba(255,182,193,0.5)]"
+                />
             </div>
 
             {/* State Text */}
