@@ -2462,7 +2462,67 @@ export const PROVIDERS: SourceProvider[] = [wanbengeProvider, yedujiProvider, sh
 export const searchNovel = async (keyword: string, source: any = 'auto'): Promise<Novel[]> => {
   // Check if keyword is a URL
   if (isUrl(keyword)) {
-      // Generic URL handling (experimental)
+      console.log(`[Search] Detected URL: ${keyword}喵~`);
+
+      // 1. 夜读集 (Yeduji) URL 直达支持喵~
+      if (keyword.includes('yeduji.com')) {
+          try {
+              console.log(`[Search] Direct parsing Yeduji URL: ${keyword}喵~`);
+              const html = await fetchText(keyword);
+              const doc = parseHTML(html);
+              
+              // 提取标题：优先 h1，其次从 title 标签提取
+              let title = doc.querySelector('h1')?.textContent?.trim();
+              if (!title) {
+                  const pageTitle = doc.querySelector('title')?.textContent || "";
+                  // 格式通常是 "书名 - 作者 - 夜读集"
+                  const parts = pageTitle.split(' - ');
+                  if (parts.length > 0) title = parts[0];
+              }
+              title = title || "未知标题";
+              
+              // 提取作者
+              const authorLabel = Array.from(doc.querySelectorAll('main span, main div, .info span')).find(el => el.textContent?.includes('作者'));
+              let author = "未知";
+              if (authorLabel) {
+                  const text = authorLabel.textContent || "";
+                  if (text.includes('：')) {
+                      author = text.split('：')[1].trim();
+                  } else {
+                      author = authorLabel.nextElementSibling?.textContent?.trim() || author;
+                  }
+              }
+
+              // 提取简介
+              const descEl = doc.querySelector('.desc') || doc.querySelector('main p') || doc.querySelector('.intro');
+              const description = descEl?.textContent?.trim() || "";
+
+              // 提取封面
+              const coverImg = doc.querySelector('main img') || doc.querySelector('.cover img') || doc.querySelector('img[src*="cover"]');
+              let coverUrl = coverImg?.getAttribute('src') || coverImg?.getAttribute('data-src') || "";
+              if (coverUrl && !coverUrl.startsWith('http')) {
+                  coverUrl = `${YEDUJI_URL}${coverUrl.startsWith('/') ? '' : '/'}${coverUrl}`;
+              }
+
+              return [{
+                  id: keyword,
+                  title,
+                  author,
+                  description,
+                  coverUrl: proxifyImage(coverUrl),
+                  tags: [],
+                  status: 'Unknown',
+                  detailUrl: keyword,
+                  chapters: [], // 详情页获取时会填充
+                  sourceName: '夜读集'
+              }];
+
+          } catch (e) {
+              console.error(`[Search] Failed to parse Yeduji URL:`, e);
+          }
+      }
+      
+      // 可以在这里扩展其他站点的 URL 支持喵~
   }
 
   console.log(`[Search] Starting search for "${keyword}" across all providers喵~`);
