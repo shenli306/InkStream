@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { Search, Download, ArrowRight, Loader2, Globe, FileText, CheckCircle2, AlertCircle, ChevronLeft, Play, X, Clock, Video, Image as ImageIcon, Folder, ChevronRight, Maximize2 } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { Search, Download, ArrowRight, Loader2, Globe, FileText, CheckCircle2, AlertCircle, ChevronLeft, Play, X, Clock, Video, Image as ImageIcon, Folder, ChevronRight, Maximize2, MessageSquarePlus, Trash2 } from 'lucide-react';
 import { Novel, AppState } from './types';
 import { searchNovel, getNovelDetails, downloadAndParseNovel, fetchBlob } from './services/source';
 import { generateEpub } from './services/epub';
@@ -9,6 +9,7 @@ import { BookCard } from './components/BookCard';
 import { Reader } from './components/Reader';
 import { VideoCard } from './components/VideoCard';
 import { VideoModal } from './components/VideoModal';
+import { DanmakuOverlay, DanmakuItem } from './components/DanmakuOverlay';
 
 // Photo Preview Modal Component 喵~
 const PhotoModal = ({ photo, onClose }: { photo: any, onClose: () => void }) => {
@@ -87,6 +88,135 @@ export default function App() {
   const [photoHasMore, setPhotoHasMore] = useState(false);
   const [selectedPhoto, setSelectedPhoto] = useState<any>(null);
   const resolvedCoverUrl = resolveCoverUrl(selectedNovel?.coverUrl);
+
+  // Suggestion & Danmaku State 喵~
+  const [suggestions, setSuggestions] = useState<string[]>([]);
+  const [activeDanmaku, setActiveDanmaku] = useState<DanmakuItem[]>([]);
+  const [isSuggestionModalOpen, setIsSuggestionModalOpen] = useState(false);
+  const [suggestionInput, setSuggestionInput] = useState('');
+  const [isAdminMode, setIsAdminMode] = useState(false);
+
+  // Admin mode check in search
+  useEffect(() => {
+    if (query === '306825') {
+      const newMode = !isAdminMode;
+      setIsAdminMode(newMode);
+      setQuery(''); // Clear input
+      alert(newMode ? "管理员模式已开启！点击弹幕可删除喵~ (再次输入密码可退出)" : "已退出管理员模式喵~");
+    }
+  }, [query]);
+
+  // Danmaku Queue Ref 喵~
+  const danmakuQueueRef = useRef<string[]>([]);
+  const activeDanmakuRef = useRef<DanmakuItem[]>([]);
+
+  // Sync ref with state
+  useEffect(() => {
+    activeDanmakuRef.current = activeDanmaku;
+  }, [activeDanmaku]);
+
+  // Helper for Lane Calculation 喵~
+  const getRandomLaneTop = () => {
+    // Split into Top and Bottom zones to avoid center content (Search Box & Results)
+    // Top Zone: 2% - 15% (2 lanes)
+    // Bottom Zone: 85% - 98% (2 lanes)
+    
+    const topZoneStart = 2;
+    const topZoneCount = 2; // Lanes at 2%, 8%
+    
+    const bottomZoneStart = 85;
+    const bottomZoneCount = 2; // Lanes at 85%, 91%
+    
+    const totalLanes = topZoneCount + bottomZoneCount;
+    const laneIndex = Math.floor(Math.random() * totalLanes);
+    
+    const LANE_HEIGHT = 6; // 6% height per lane
+    
+    if (laneIndex < topZoneCount) {
+      return topZoneStart + (laneIndex * LANE_HEIGHT);
+    } else {
+      return bottomZoneStart + ((laneIndex - topZoneCount) * LANE_HEIGHT);
+    }
+  };
+
+  // Danmaku Spawner (Every 2s)
+  useEffect(() => {
+    if (suggestions.length === 0) return;
+
+    const timer = setInterval(() => {
+      // 1. Identify suggestions currently on screen
+      const onScreenTexts = new Set(activeDanmakuRef.current.map(d => d.text));
+      
+      // 2. Refill queue if needed (but only with available ones if possible, or all)
+      if (danmakuQueueRef.current.length === 0) {
+        danmakuQueueRef.current = [...suggestions].sort(() => Math.random() - 0.5);
+      }
+
+      // 3. Find first candidate in queue that is NOT on screen
+      let candidateIndex = -1;
+      // Iterate backwards to find from end (since we pop) or just find first from end that works
+      // Actually pop is from end, so let's look at the end.
+      for (let i = danmakuQueueRef.current.length - 1; i >= 0; i--) {
+        const t = danmakuQueueRef.current[i];
+        if (!onScreenTexts.has(t)) {
+          candidateIndex = i;
+          break;
+        }
+      }
+
+      // 4. Spawn if found
+      if (candidateIndex !== -1) {
+        // Remove from queue at specific index
+        const text = danmakuQueueRef.current.splice(candidateIndex, 1)[0];
+        spawnDanmaku(text);
+      } else {
+        // All items in queue are currently on screen.
+        // Do nothing this tick. Wait for them to finish animation.
+      }
+      
+    }, 2000); 
+
+    const spawnDanmaku = (text: string) => {
+        const newItem: DanmakuItem = {
+            id: Date.now().toString() + Math.random().toString().slice(2, 8),
+            text,
+            top: getRandomLaneTop(),
+            duration: Math.random() * 5 + 15,
+            startTime: Date.now()
+        };
+        setActiveDanmaku(prev => [...prev, newItem]);
+    };
+
+    return () => clearInterval(timer);
+  }, [suggestions]);
+
+  const handleAddSuggestion = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!suggestionInput.trim()) return;
+    setSuggestions(prev => [...prev, suggestionInput.trim()]);
+    
+    // Spawn immediately for feedback
+    const newItem: DanmakuItem = {
+        id: Date.now().toString(),
+        text: suggestionInput.trim(),
+        top: getRandomLaneTop(),
+        duration: 15,
+        startTime: Date.now()
+    };
+    setActiveDanmaku(prev => [...prev, newItem]);
+    
+    setSuggestionInput('');
+    setIsSuggestionModalOpen(false);
+  };
+
+  const handleDeleteSuggestion = (id: string) => {
+    const item = activeDanmaku.find(i => i.id === id);
+    if (item) {
+      // Direct delete without confirmation 喵~
+      setSuggestions(prev => prev.filter(s => s !== item.text));
+      setActiveDanmaku(prev => prev.filter(i => i.id !== id));
+    }
+  };
 
   const fetchVideos = async (page: number, sort: 'desc' | 'asc', isLoadMore = false) => {
     setIsVideoLoading(true);
@@ -552,7 +682,18 @@ export default function App() {
                       <span className="bg-indigo-500/20 text-indigo-300 px-2 py-0.5 rounded text-xs border border-indigo-500/20">TXT直连</span>
                     </div>
                     <h2 className="text-4xl font-bold text-white mb-2 font-serif">{selectedNovel.title}</h2>
-                    <p className="text-xl text-indigo-200">{selectedNovel.author}</p>
+                    <p className="text-xl text-indigo-200 mb-4">{selectedNovel.author}</p>
+
+                    {/* Tags 喵~ */}
+                    {selectedNovel.tags && selectedNovel.tags.length > 0 && (
+                      <div className="flex flex-wrap gap-2 mb-6">
+                        {selectedNovel.tags.map((tag, i) => (
+                          <span key={i} className="px-3 py-1 rounded-full bg-pink-500/10 text-pink-300 border border-pink-500/20 text-xs font-medium">
+                            {tag}
+                          </span>
+                        ))}
+                      </div>
+                    )}
                   </div>
 
                   <div className="prose prose-invert prose-sm text-white/70 max-h-32 overflow-y-auto custom-scrollbar">
@@ -839,6 +980,146 @@ export default function App() {
         )}
 
       </main>
+
+      {/* Danmaku Overlay 喵~ */}
+      <DanmakuOverlay 
+        items={activeDanmaku} 
+        isAdmin={isAdminMode} 
+        onDelete={handleDeleteSuggestion} 
+        onAnimationEnd={(id) => setActiveDanmaku(prev => prev.filter(i => i.id !== id))}
+      />
+
+      {/* Suggestion FAB - Search Box Style 喵~ */}
+      <div className="fixed bottom-6 left-6 z-50 group">
+        {/* Glow effect matching search box */}
+        <div className="absolute inset-0 bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 rounded-[2rem] blur opacity-20 group-hover:opacity-40 transition-opacity duration-500"></div>
+        
+        <button
+          onClick={() => setIsSuggestionModalOpen(true)}
+          className="relative glass-input rounded-[2rem] px-6 py-4 flex items-center gap-3 transition-all duration-300 hover:bg-black/40 active:scale-95"
+          title="投递建议喵~"
+        >
+          <MessageSquarePlus size={20} className="text-white/80 group-hover:text-white transition-colors group-hover:rotate-12" />
+          <span className="font-medium text-white/90 group-hover:text-white">建议箱</span>
+        </button>
+      </div>
+
+      {/* Suggestion Modal 喵~ */}
+      {isSuggestionModalOpen && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 animate-in fade-in duration-300">
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setIsSuggestionModalOpen(false)} />
+          <div className="relative bg-[#1a1b26] p-8 rounded-[2rem] w-full max-w-md border border-pink-500/20 shadow-2xl animate-in zoom-in-95 duration-300">
+            <button 
+              onClick={() => setIsSuggestionModalOpen(false)}
+              className="absolute top-4 right-4 p-2 hover:bg-white/10 rounded-full text-white/60 transition-colors"
+            >
+              <X size={20} />
+            </button>
+            
+            <h3 className="text-2xl font-bold text-white mb-2 flex items-center gap-2">
+              <span className="text-pink-400">✨</span> 建议箱
+            </h3>
+            <p className="text-white/40 mb-6 text-sm">无论什么建议都可以告诉猫娘哦，猫娘会把它们变成弹幕飘过屏幕喵~</p>
+            
+            <form onSubmit={handleAddSuggestion} className="space-y-4">
+              <textarea
+                value={suggestionInput}
+                onChange={e => setSuggestionInput(e.target.value)}
+                placeholder="在这里输入你的建议..."
+                className="w-full h-32 bg-black/20 rounded-2xl p-4 text-white placeholder:text-white/20 resize-none focus:outline-none focus:ring-2 focus:ring-pink-500/50 transition-all"
+                autoFocus
+              />
+              <style>{`
+              .uiverse-btn {
+                position: relative;
+                overflow: hidden;
+                border: 1px solid #18181a;
+                color: #18181a;
+                display: inline-block;
+                font-size: 15px;
+                line-height: 15px;
+                padding: 18px 18px 17px;
+                text-decoration: none;
+                cursor: pointer;
+                background: #fff;
+                user-select: none;
+                -webkit-user-select: none;
+                touch-action: manipulation;
+                font-weight: 900;
+                border-radius: 12px;
+                width: 100%;
+                transition: transform 0.2s;
+              }
+
+              .uiverse-btn span:first-child {
+                position: relative;
+                transition: color 600ms cubic-bezier(0.48, 0, 0.12, 1);
+                z-index: 10;
+              }
+
+              .uiverse-btn span:last-child {
+                color: white;
+                display: block;
+                position: absolute;
+                bottom: 0;
+                transition: all 500ms cubic-bezier(0.48, 0, 0.12, 1);
+                z-index: 100;
+                opacity: 0;
+                top: 50%;
+                left: 50%;
+                transform: translateY(225%) translateX(-50%);
+                height: 14px;
+                line-height: 13px;
+                width: 100%;
+                text-align: center;
+              }
+
+              .uiverse-btn:after {
+                content: "";
+                position: absolute;
+                bottom: -50%;
+                left: 0;
+                width: 100%;
+                height: 100%;
+                background-color: black;
+                transform-origin: bottom center;
+                transition: transform 600ms cubic-bezier(0.48, 0, 0.12, 1);
+                transform: skewY(9.3deg) scaleY(0);
+                z-index: 50;
+              }
+
+              .uiverse-btn:hover:after {
+                transform-origin: bottom center;
+                transform: skewY(9.3deg) scaleY(2);
+              }
+
+              .uiverse-btn:hover span:last-child {
+                transform: translateX(-50%) translateY(-50%);
+                opacity: 1;
+                transition: all 900ms cubic-bezier(0.48, 0, 0.12, 1);
+              }
+
+              .uiverse-btn:hover span:first-child {
+                color: white;
+              }
+              
+              .uiverse-btn:active {
+                transform: scale(0.95);
+              }
+            `}</style>
+            <button
+              type="submit"
+              disabled={!suggestionInput.trim()}
+              className="uiverse-btn disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <span className="flex items-center justify-center gap-2">发送弹幕喵~ 🚀</span>
+              <span>BIU! BIU! BIU! ✨</span>
+            </button>
+            </form>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }

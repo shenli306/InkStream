@@ -1015,13 +1015,25 @@ const yedujiProvider: SourceProvider = {
       // 统一使用代理处理封面 喵~
       coverUrl = proxifyImage(coverUrl);
 
+      // 尝试从列表项提取标签喵~
+      const tags: string[] = [];
+      const tagDt = Array.from(item.querySelectorAll('dl dt')).find(dt => dt.textContent?.includes('标签'));
+      if (tagDt) {
+          const dd = tagDt.nextElementSibling;
+          if (dd) {
+              dd.querySelectorAll('a').forEach(a => {
+                  if (a.textContent) tags.push(a.textContent.trim());
+              });
+          }
+      }
+
       results.push({
         id: detailUrl,
         title: title,
         author: author,
         description: description,
         coverUrl: coverUrl,
-        tags: [],
+        tags: tags,
         status: 'Unknown',
         detailUrl: detailUrl,
         chapters: [],
@@ -1067,6 +1079,19 @@ const yedujiProvider: SourceProvider = {
     const descEl = doc.querySelector('main p') || doc.querySelector('.desc');
     if (descEl) {
       novel.description = descEl.textContent?.trim() || novel.description;
+    }
+
+    // 提取标签喵~
+    const tagDt = Array.from(doc.querySelectorAll('dl dt')).find(dt => dt.textContent?.includes('标签'));
+    if (tagDt) {
+        const dd = tagDt.nextElementSibling;
+        if (dd) {
+            const tags: string[] = [];
+            dd.querySelectorAll('a').forEach(a => {
+                if (a.textContent) tags.push(a.textContent.trim());
+            });
+            if (tags.length > 0) novel.tags = tags;
+        }
     }
 
     // 获取章节列表
@@ -2504,13 +2529,25 @@ export const searchNovel = async (keyword: string, source: any = 'auto'): Promis
                   coverUrl = `${YEDUJI_URL}${coverUrl.startsWith('/') ? '' : '/'}${coverUrl}`;
               }
 
+              // 提取标签喵~
+              const tags: string[] = [];
+              const tagDt = Array.from(doc.querySelectorAll('dl dt')).find(dt => dt.textContent?.includes('标签'));
+              if (tagDt) {
+                  const dd = tagDt.nextElementSibling;
+                  if (dd) {
+                      dd.querySelectorAll('a').forEach(a => {
+                          if (a.textContent) tags.push(a.textContent.trim());
+                      });
+                  }
+              }
+
               return [{
                   id: keyword,
                   title,
                   author,
                   description,
                   coverUrl: proxifyImage(coverUrl),
-                  tags: [],
+                  tags: tags,
                   status: 'Unknown',
                   detailUrl: keyword,
                   chapters: [], // 详情页获取时会填充
