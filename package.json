@@ -11,6 +11,7 @@
   "dependencies": {
     "@react-three/drei": "^10.7.7",
     "@react-three/fiber": "^9.5.0",
+    "@vercel/kv": "^3.0.0",
     "iconv-lite": "^0.7.0",
     "jsdom": "^27.4.0",
     "jszip": "^3.10.1",

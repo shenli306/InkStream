@@ -61,6 +61,21 @@ export default defineConfig(({ mode }) => {
       {
         name: 'configure-server',
         configureServer(server) {
+          // 本地开发启动时，自动清理旧弹幕（模拟服务器重启）喵~
+          import('fs').then(fs => {
+             import('path').then(path => {
+                const danmakuFile = path.join(__dirname, 'danmaku.json');
+                if (fs.existsSync(danmakuFile)) {
+                    console.log("[Vite Dev] Clearing danmaku on startup 喵~");
+                    try {
+                        fs.unlinkSync(danmakuFile);
+                    } catch (e) {
+                        console.warn("[Vite Dev] Failed to clear danmaku:", e);
+                    }
+                }
+             });
+          });
+
           server.middlewares.use((req, res, next) => {
             const url = req.url ? new URL(req.url, `http://${req.headers.host}`) : null;
             if (!url) return next();
@@ -1499,51 +1514,6 @@ export default defineConfig(({ mode }) => {
               return;
             }
 
-            // Danmaku Storage API 喵~
-            if (url.pathname === '/api/danmaku') {
-              import('fs').then(fs => {
-                import('path').then(path => {
-                  const danmakuFile = path.join(__dirname, 'danmaku.json');
-
-                  if (req.method === 'GET') {
-                    try {
-                      if (fs.existsSync(danmakuFile)) {
-                        const data = fs.readFileSync(danmakuFile, 'utf-8');
-                        res.setHeader('Content-Type', 'application/json');
-                        res.end(data);
-                      } else {
-                        res.setHeader('Content-Type', 'application/json');
-                        res.end(JSON.stringify([]));
-                      }
-                    } catch (err: any) {
-                      res.statusCode = 500;
-                      res.end(JSON.stringify({ error: err.message }));
-                    }
-                    return;
-                  }
-
-                  if (req.method === 'POST') {
-                    let body = '';
-                    req.on('data', chunk => body += chunk);
-                    req.on('end', () => {
-                      try {
-                        // Just validate it's JSON
-                        JSON.parse(body);
-                        fs.writeFileSync(danmakuFile, body, 'utf-8');
-                        res.setHeader('Content-Type', 'application/json');
-                        res.end(JSON.stringify({ success: true }));
-                      } catch (err: any) {
-                        res.statusCode = 500;
-                        res.end(JSON.stringify({ error: err.message }));
-                      }
-                    });
-                    return;
-                  }
-                });
-              });
-              return;
-            }
-
             next();
           });
         }
@@ -1551,7 +1521,8 @@ export default defineConfig(({ mode }) => {
     ],
     define: {
       'process.env.API_KEY': JSON.stringify(env.GEMINI_API_KEY),
-      'process.env.GEMINI_API_KEY': JSON.stringify(env.GEMINI_API_KEY)
+      'process.env.GEMINI_API_KEY': JSON.stringify(env.GEMINI_API_KEY),
+      '__APP_BUILD_TIME__': JSON.stringify(Date.now())
     },
     resolve: {
       alias: {
