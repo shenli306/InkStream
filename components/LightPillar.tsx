@@ -71,10 +71,13 @@ const LightPillar: React.FC<LightPillarProps> = ({
 
     const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
     const isLowEndDevice = isMobile || (navigator.hardwareConcurrency && navigator.hardwareConcurrency <= 4);
+    const isSmallScreen = window.innerWidth < 768 || window.innerHeight < 600;
 
     let effectiveQuality = quality;
     if (isLowEndDevice && quality === 'high') effectiveQuality = 'medium';
     if (isMobile && quality !== 'low') effectiveQuality = 'low';
+    if (isSmallScreen && quality === 'high') effectiveQuality = 'medium';
+    if (isSmallScreen && isMobile) effectiveQuality = 'low';
 
     const qualitySettings = {
       low: { iterations: 24, waveIterations: 1, pixelRatio: 0.5, precision: 'mediump', stepMultiplier: 1.5 },
@@ -108,7 +111,28 @@ const LightPillar: React.FC<LightPillarProps> = ({
     renderer.setSize(width, height);
     renderer.setPixelRatio(settings.pixelRatio);
     renderer.setClearColor(0x000000, 0);
-    container.appendChild(renderer.domElement);
+
+    const canvas = renderer.domElement;
+    canvas.style.width = '100%';
+    canvas.style.height = '100%';
+    canvas.style.display = 'block';
+    canvas.style.touchAction = 'none';
+
+    const handleContextLost = (event: Event) => {
+      event.preventDefault();
+      console.warn('LightPillar: WebGL context lost');
+      setWebGLSupported(false);
+    };
+
+    const handleContextRestored = () => {
+      console.info('LightPillar: WebGL context restored');
+      setWebGLSupported(true);
+    };
+
+    canvas.addEventListener('webglcontextlost', handleContextLost, false);
+    canvas.addEventListener('webglcontextrestored', handleContextRestored, false);
+
+    container.appendChild(canvas);
     rendererRef.current = renderer;
 
     const parseColor = (hex: string) => {
@@ -306,9 +330,19 @@ const LightPillar: React.FC<LightPillarProps> = ({
     };
 
     window.addEventListener('resize', handleResize, { passive: true });
+    window.addEventListener('orientationchange', handleResize, { passive: true });
+    window.addEventListener('scroll', handleResize, { passive: true });
+
+    // iOS 地址栏收起可能没触发 resize；再加一个 observer 保障
+    const resizeObserver = new ResizeObserver(handleResize);
+    resizeObserver.observe(container);
 
     return () => {
       window.removeEventListener('resize', handleResize);
+      window.removeEventListener('orientationchange', handleResize);
+      window.removeEventListener('scroll', handleResize);
+      resizeObserver.disconnect();
+
       if (interactive) {
         container.removeEventListener('mousemove', handleMouseMove);
       }
@@ -316,10 +350,13 @@ const LightPillar: React.FC<LightPillarProps> = ({
         cancelAnimationFrame(rafRef.current);
       }
       if (rendererRef.current) {
+        const canvas = rendererRef.current.domElement;
+        canvas.removeEventListener('webglcontextlost', handleContextLost);
+        canvas.removeEventListener('webglcontextrestored', handleContextRestored);
         rendererRef.current.dispose();
         rendererRef.current.forceContextLoss();
-        if (container.contains(rendererRef.current.domElement)) {
-          container.removeChild(rendererRef.current.domElement);
+        if (container.contains(canvas)) {
+          container.removeChild(canvas);
         }
       }
       if (materialRef.current) {

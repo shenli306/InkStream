@@ -47,7 +47,7 @@ export default function App() {
   // 3068 书源选择模式喵~
   const [showSourceSelector, setShowSourceSelector] = useState(false);
   const [sourceSelectorPhase, setSourceSelectorPhase] = useState<'idle' | 'shrinking' | 'circle' | 'expanding' | 'retreating'>('idle');
-  const [searchBoxTransform, setSearchBoxTransform] = useState({ scale: 1, opacity: 1, borderRadius: '4rem' });
+  const [searchBoxTransform, setSearchBoxTransform] = useState({ scale: 1, opacity: 1, borderRadius: '2rem' });
   
   // Video-related state 喵~
   const [videoResults, setVideoResults] = useState<any[]>([]);
@@ -358,7 +358,13 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen relative overflow-x-hidden text-slate-100 pb-20">
+    <div
+      className="min-h-screen relative overflow-x-hidden text-slate-100 pb-20 pt-20 sm:pt-32"
+      style={{
+        paddingTop: 'calc(env(safe-area-inset-top) + 5rem)',
+        paddingBottom: 'calc(env(safe-area-inset-bottom) + 5rem)'
+      }}
+    >
 
       <DynamicIsland
         state={state}
@@ -384,7 +390,11 @@ export default function App() {
             setState(AppState.PREVIEW); 
             setTimeout(() => window.scrollTo({ top: scrollPosition, behavior: 'smooth' }), 50);
           }}
-          className="fixed top-6 left-6 z-40 p-3 bg-black/20 backdrop-blur-xl rounded-full text-white/80 hover:bg-white/10 transition-all border border-white/10 hover:scale-110 active:scale-95 group"
+          className="fixed z-40 p-3 bg-black/20 backdrop-blur-xl rounded-full text-white/80 hover:bg-white/10 transition-all border border-white/10 hover:scale-110 active:scale-95 group"
+          style={{
+            top: 'calc(env(safe-area-inset-top) + 1.5rem)',
+            left: 'calc(env(safe-area-inset-left) + 1.5rem)'
+          }}
           title="返回搜索"
         >
           <ChevronLeft size={24} className="group-hover:-translate-x-1 transition-transform" />
@@ -407,26 +417,35 @@ export default function App() {
 
       {/* Background Ambience (Light Pillar) */}
       <div className="fixed inset-0 pointer-events-none overflow-hidden">
-        <LightPillar
-          topColor="#5227FF"
-          bottomColor="#FF9FFC"
-          intensity={1}
-          rotationSpeed={0.3}
-          glowAmount={0.002}
-          pillarWidth={3}
-          pillarHeight={0.4}
-          noiseIntensity={0.5}
-          pillarRotation={25}
-          interactive={false}
-          mixBlendMode="screen"
-          quality="high"
-        />
+        <div
+          style={{
+            position: 'absolute',
+            inset: 0,
+            width: '100%',
+            height: '100%',
+          }}
+        >
+          <LightPillar
+            topColor="#5227FF"
+            bottomColor="#FF9FFC"
+            intensity={1}
+            rotationSpeed={0.3}
+            glowAmount={0.002}
+            pillarWidth={3}
+            pillarHeight={0.4}
+            noiseIntensity={0.5}
+            pillarRotation={25}
+            interactive={false}
+            mixBlendMode="screen"
+            quality="high"
+          />
+        </div>
       </div>
 
-      <main className="relative max-w-5xl mx-auto px-6 pt-32 flex flex-col items-center min-h-[80vh]">
+      <main className="relative max-w-5xl mx-auto px-4 sm:px-6 pt-20 sm:pt-32 flex flex-col items-center min-h-[80vh]">
 
         {/* Header */}
-        <div className={`text-center transition-all duration-700 ${state !== AppState.IDLE ? 'scale-75 opacity-50 mb-4' : 'mb-12'}`}>
+        <div className={`text-center transition-all duration-500 ${state !== AppState.IDLE ? 'scale-75 opacity-50 mb-4' : 'mb-12'}`}>
           <h1 className="text-6xl md:text-8xl font-black tracking-tighter text-transparent bg-clip-text bg-gradient-to-b from-white via-white to-white/40 drop-shadow-2xl mb-6">
             InkStream
           </h1>
@@ -439,13 +458,12 @@ export default function App() {
         {state !== AppState.DOWNLOADING && state !== AppState.PARSING && state !== AppState.PACKING && !showSourceSelector && (
           <div className="w-full max-w-2xl z-20 mb-12 flex flex-col items-center gap-6">
             <form onSubmit={handleSearch} className="w-full relative group">
-              <div className="absolute inset-0 bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 rounded-[2rem] blur opacity-20 group-hover:opacity-40 transition-opacity duration-500"></div>
+              <div className="search-box-glow group-hover:opacity-40 transition-opacity duration-500"></div>
               <div 
-                className="relative glass-input rounded-[2rem] p-2 flex items-center transition-all duration-300 focus-within:ring-2 focus-within:ring-white/20 focus-within:bg-black/40"
+                className="search-box p-2 flex items-center transition-all duration-300 focus-within:ring-2 focus-within:ring-white/20 focus-within:bg-black/40"
                 style={{ 
                   transform: `scale(${searchBoxTransform.scale})`,
                   opacity: searchBoxTransform.opacity,
-                  borderRadius: searchBoxTransform.borderRadius,
                 }}
               >
                 <Search className="ml-5 text-white/40" size={24} />
@@ -499,8 +517,8 @@ export default function App() {
 
         {/* Selected Novel Detail View */}
         {selectedNovel && (state === AppState.PREVIEW || state === AppState.ANALYZING || state === AppState.DOWNLOADING || state === AppState.PARSING || state === AppState.PACKING || state === AppState.COMPLETE) && (
-          <div className="w-full mt-4 animate-in slide-in-from-bottom-10 fade-in duration-700 mb-20">
-            <div className="glass-panel rounded-[3rem] p-8 md:p-12 border border-white/10 relative overflow-hidden">
+          <div className="w-full mt-4 animate-in slide-in-from-bottom-10 fade-in duration-500 mb-20">
+            <div className="glass-panel p-8 md:p-12 border border-white/10 relative overflow-hidden">
 
               {/* Detail Layout */}
               <div className="flex flex-col md:flex-row gap-12 relative z-10">

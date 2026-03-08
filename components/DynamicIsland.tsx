@@ -27,18 +27,17 @@ export const DynamicIsland: React.FC<DynamicIslandProps> = ({ state, progress, m
   const isExpanded = isWorking || showSuccess;
 
   // Animation bezier curve mimicking iOS physics
-  const springTransition = "transition-all duration-[600ms] ease-[cubic-bezier(0.175,0.885,0.32,1.1)]"; // Bouncy
-  const smoothTransition = "transition-all duration-700 ease-[cubic-bezier(0.32,0.72,0,1)]"; // Smooth
+  const springTransition = "transition-all duration-[400ms] ease-[cubic-bezier(0.175,0.885,0.32,1.1)]"; // Bouncy
+  const smoothTransition = "transition-all duration-500 ease-[cubic-bezier(0.32,0.72,0,1)]"; // Smooth
 
   return (
-    <div className={`fixed top-4 left-1/2 -translate-x-1/2 z-[100] ${smoothTransition}`}>
+    <div className={`fixed top-[calc(env(safe-area-inset-top)+1rem)] left-1/2 -translate-x-1/2 z-[100] ${smoothTransition}`}>
       <div
         onClick={onClick}
         className={`
-          glass-panel bg-black/20 border border-white/15 shadow-[0_8px_40px_-12px_rgba(0,0,0,0.5)] 
-          rounded-[2.5rem] overflow-hidden text-white flex items-center justify-center cursor-pointer
+          glass-island overflow-hidden text-white flex items-center justify-center cursor-pointer
           ${smoothTransition}
-          ${isExpanded ? 'w-[360px] h-[68px] px-2' : 'w-[120px] h-[36px]'}
+          ${isExpanded ? 'w-[min(90vw,360px)] h-[68px] px-2' : 'w-[min(40vw,120px)] h-[36px]'}
         `}
       >
         <div className="relative w-full h-full flex items-center justify-center">

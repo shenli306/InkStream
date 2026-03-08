@@ -30,7 +30,28 @@
         backdrop-filter: blur(24px) saturate(180%);
         -webkit-backdrop-filter: blur(24px) saturate(180%);
         border: 1px solid rgba(255, 255, 255, 0.12);
-        box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+        box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37), 0 0 20px rgba(99, 102, 241, 0.3);
+        border-radius: 3rem;
+      }
+
+      /* Dynamic Island specific style */
+      .glass-island {
+        position: relative;
+        overflow: hidden;
+        background: rgba(0, 0, 0, 0.2);
+        backdrop-filter: blur(24px) saturate(180%);
+        -webkit-backdrop-filter: blur(24px) saturate(180%);
+        border: 1px solid rgba(255, 255, 255, 0.15);
+        box-shadow: 0 8px 40px -12px rgba(0, 0, 0, 0.5), 0 0 20px rgba(99, 102, 241, 0.3);
+        border-radius: 2.5rem;
+      }
+
+      /* Fallback for browsers that don't support backdrop-filter */
+      @supports not (backdrop-filter: blur(24px)) {
+        .glass-panel {
+          background: rgba(0, 0, 0, 0.7);
+          box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37), 0 0 20px rgba(99, 102, 241, 0.3);
+        }
       }
 
       .glass-panel::before {
@@ -58,6 +79,38 @@
         border: 1px solid rgba(255, 255, 255, 0.12);
         backdrop-filter: blur(14px) saturate(160%);
         -webkit-backdrop-filter: blur(14px) saturate(160%);
+        border-radius: 2rem;
+        box-shadow: 0 0 20px rgba(99, 102, 241, 0.2);
+      }
+
+      /* Search box specific style */
+      .search-box {
+        position: relative;
+        overflow: hidden;
+        background: rgba(0, 0, 0, 0.22);
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        backdrop-filter: blur(14px) saturate(160%);
+        -webkit-backdrop-filter: blur(14px) saturate(160%);
+        border-radius: 2rem !important;
+        box-shadow: 0 0 20px rgba(99, 102, 241, 0.2);
+      }
+
+      .search-box-glow {
+        position: absolute;
+        inset: 0;
+        background: linear-gradient(90deg, rgba(99, 102, 241, 0.5), rgba(168, 85, 247, 0.5), rgba(236, 72, 153, 0.5));
+        filter: blur(20px);
+        opacity: 0.2;
+        border-radius: 2rem;
+        pointer-events: none;
+      }
+
+      /* Fallback for browsers that don't support backdrop-filter */
+      @supports not (backdrop-filter: blur(14px)) {
+        .glass-input {
+          background: rgba(0, 0, 0, 0.7);
+          box-shadow: 0 0 20px rgba(99, 102, 241, 0.2);
+        }
       }
 
       .glass-input::before {
@@ -82,6 +135,33 @@
       ::-webkit-scrollbar-thumb {
         background: rgba(255, 255, 255, 0.2); 
         border-radius: 10px;
+      }
+
+      /* Mobile-specific styles for small screens */
+      @media (max-width: 768px) {
+        .glass-panel {
+          border-radius: 3rem !important;
+          box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37), 0 0 20px rgba(99, 102, 241, 0.3) !important;
+        }
+        
+        .glass-input {
+          border-radius: 2rem !important;
+          box-shadow: 0 0 20px rgba(99, 102, 241, 0.2) !important;
+        }
+        
+        .glass-island {
+          border-radius: 2.5rem !important;
+          box-shadow: 0 8px 40px -12px rgba(0, 0, 0, 0.5), 0 0 20px rgba(99, 102, 241, 0.3) !important;
+        }
+        
+        .search-box {
+          border-radius: 2rem !important;
+          box-shadow: 0 0 20px rgba(99, 102, 241, 0.2) !important;
+        }
+        
+        .search-box-glow {
+          border-radius: 2rem !important;
+        }
       }
     </style>
     <style>
