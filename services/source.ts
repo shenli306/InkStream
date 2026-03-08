@@ -2498,7 +2498,42 @@ getChapterContent: async (chapter: Chapter): Promise<string> => {
 
 export const PROVIDERS: SourceProvider[] = [wanbengeProvider, yedujiProvider, shukugeProvider, dingdianProvider, bqguiProvider, xpxsProvider, localProvider];
 
-export const searchNovel = async (keyword: string, source: any = 'auto'): Promise<Novel[]> => {
+// 书源启用/禁用配置喵~ (默认禁用夜读集)
+export const SOURCE_ENABLED_CONFIG: Record<string, boolean> = {
+  '完本阁': true,
+  '夜读集': false,
+  '书库阁': true,
+  '顶点小说网': true,
+  '笔趣阁 (GUI)': true,
+  '虾皮小说': true,
+  '本地书库': true
+};
+
+// 设置书源启用状态喵~
+export const setSourceEnabled = (sourceName: string, enabled: boolean): void => {
+  SOURCE_ENABLED_CONFIG[sourceName] = enabled;
+  try {
+    localStorage.setItem('inkstream_source_config', JSON.stringify(SOURCE_ENABLED_CONFIG));
+  } catch (e) {
+    console.warn('[Source] Failed to save source config to localStorage喵~', e);
+  }
+};
+
+// 从 localStorage 加载书源配置喵~
+export const loadSourceConfig = (): Record<string, boolean> => {
+  try {
+    const saved = localStorage.getItem('inkstream_source_config');
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      Object.assign(SOURCE_ENABLED_CONFIG, parsed);
+    }
+  } catch (e) {
+    console.warn('[Source] Failed to load source config from localStorage喵~', e);
+  }
+  return SOURCE_ENABLED_CONFIG;
+};
+
+export const searchNovel = async (keyword: string, source: any = 'auto', respectConfig: boolean = true): Promise<Novel[]> => {
   // Check if keyword is a URL
   if (isUrl(keyword)) {
       console.log(`[Search] Detected URL: ${keyword}喵~`);
@@ -2525,8 +2560,8 @@ export const searchNovel = async (keyword: string, source: any = 'auto'): Promis
               let author = "未知";
               if (authorLabel) {
                   const text = authorLabel.textContent || "";
-                  if (text.includes('：')) {
-                      author = text.split('：')[1].trim();
+                  if (text.includes(':')) {
+                      author = text.split(':')[1].trim();
                   } else {
                       author = authorLabel.nextElementSibling?.textContent?.trim() || author;
                   }
@@ -2576,15 +2611,26 @@ export const searchNovel = async (keyword: string, source: any = 'auto'): Promis
       // 可以在这里扩展其他站点的 URL 支持喵~
   }
 
-  console.log(`[Search] Starting search for "${keyword}" across all providers喵~`);
+  console.log(`[Search] Starting search for "${keyword}" across all providers 喵~`);
   
   const resultsByProvider: Record<string, number> = {};
   
+  // 加载书源配置喵~
+  if (respectConfig) {
+    loadSourceConfig();
+  }
+  
   const promises = PROVIDERS.map(p => {
+    // 如果配置禁用且 respectConfig 为 true，则跳过该书源喵~
+    if (respectConfig && SOURCE_ENABLED_CONFIG[p.name] === false) {
+      console.log(`[Search] Skipping disabled source: ${p.name}喵~`);
+      return Promise.resolve([] as Novel[]);
+    }
+    
     // 给每个源的搜索设置超时限制喵~
     const searchPromise = p.search(keyword).then(res => {
       resultsByProvider[p.name] = res.length;
-      console.log(`[Search] ${p.name} returned ${res.length} results喵~`);
+      console.log(`[Search] ${p.name} returned ${res.length} results 喵~`);
       return res;
     }).catch(e => {
       resultsByProvider[p.name] = 0;
@@ -2592,10 +2638,10 @@ export const searchNovel = async (keyword: string, source: any = 'auto'): Promis
       return [] as Novel[];
     });
 
-    // 8秒超时，超时后返回空数组，不让它拖慢整体速度喵~
+    // 8 秒超时，超时后返回空数组，不让它拖慢整体速度喵~
     const timeoutPromise = new Promise<Novel[]>((resolve) => {
       setTimeout(() => {
-        console.warn(`[Search] ${p.name} timed out after 8s喵~`);
+        console.warn(`[Search] ${p.name} timed out after 8s 喵~`);
         resolve([]);
       }, 8000);
     });

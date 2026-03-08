@@ -8,6 +8,7 @@ import { CuteProgress } from './components/CuteProgress';
 import { BookCard } from './components/BookCard';
 import { Reader } from './components/Reader';
 import { VideoCard } from './components/VideoCard';
+import { SourceSelector } from './components/SourceSelector';
 
 const isPlaceholderCoverUrl = (url?: string | null) => {
   if (!url) return true;
@@ -42,7 +43,12 @@ export default function App() {
   const [error, setError] = useState<string | null>(null);
   const [scrollPosition, setScrollPosition] = useState(0);
   
-  // Video-related state喵~
+  // 3068 书源选择模式喵~
+  const [showSourceSelector, setShowSourceSelector] = useState(false);
+  const [sourceSelectorPhase, setSourceSelectorPhase] = useState<'idle' | 'shrinking' | 'circle' | 'expanding' | 'retreating'>('idle');
+  const [searchBoxTransform, setSearchBoxTransform] = useState({ scale: 1, opacity: 1, borderRadius: '4rem' });
+  
+  // Video-related state 喵~
   const [videoResults, setVideoResults] = useState<any[]>([]);
   const [showVideos, setShowVideos] = useState(false);
 
@@ -174,6 +180,21 @@ export default function App() {
   const handleSearch = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     if (!query.trim()) return;
+
+    // 3068 书源选择模式喵~
+    if (query.trim() === '3068') {
+      setQuery('');
+      // 动画：搜索框从两边往中间回缩成圆
+      setSearchBoxTransform({ scale: 0.08, opacity: 0, borderRadius: '50%' });
+      setSourceSelectorPhase('shrinking');
+      
+      // 等待收缩动画完成后显示书源选择器
+      setTimeout(() => {
+        setShowSourceSelector(true);
+        setSourceSelectorPhase('circle');
+      }, 700);
+      return;
+    }
 
     setState(AppState.SEARCHING);
     setError(null);
@@ -402,11 +423,18 @@ export default function App() {
         </div>
 
         {/* Search Input */}
-        {state !== AppState.DOWNLOADING && state !== AppState.PARSING && state !== AppState.PACKING && (
+        {state !== AppState.DOWNLOADING && state !== AppState.PARSING && state !== AppState.PACKING && !showSourceSelector && (
           <div className="w-full max-w-2xl z-20 mb-12 flex flex-col items-center gap-6">
             <form onSubmit={handleSearch} className="w-full relative group">
               <div className="absolute inset-0 bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 rounded-[2rem] blur opacity-20 group-hover:opacity-40 transition-opacity duration-500"></div>
-              <div className="relative glass-input rounded-[2rem] p-2 flex items-center transition-all duration-300 focus-within:ring-2 focus-within:ring-white/20 focus-within:bg-black/40">
+              <div 
+                className="relative glass-input rounded-[2rem] p-2 flex items-center transition-all duration-300 focus-within:ring-2 focus-within:ring-white/20 focus-within:bg-black/40"
+                style={{ 
+                  transform: `scale(${searchBoxTransform.scale})`,
+                  opacity: searchBoxTransform.opacity,
+                  borderRadius: searchBoxTransform.borderRadius,
+                }}
+              >
                 <Search className="ml-5 text-white/40" size={24} />
                 <input
                   type="text"
@@ -435,6 +463,24 @@ export default function App() {
                 <span className="text-xs text-red-400/60">如果是网络问题，请尝试点击搜索按钮重试</span>
               </div>
             )}
+          </div>
+        )}
+
+        {/* 3068 Source Selector Animation 喵~ */}
+        {showSourceSelector && (
+          <div className="w-full max-w-2xl z-20 mb-12 flex flex-col items-center gap-6">
+            <SourceSelector 
+              onConfirm={() => {
+                setShowSourceSelector(false);
+                setSourceSelectorPhase('idle');
+                setSearchBoxTransform({ scale: 1, opacity: 1, borderRadius: '4rem' });
+              }}
+              onCancel={() => {
+                setShowSourceSelector(false);
+                setSourceSelectorPhase('idle');
+                setSearchBoxTransform({ scale: 1, opacity: 1, borderRadius: '4rem' });
+              }}
+            />
           </div>
         )}
 
