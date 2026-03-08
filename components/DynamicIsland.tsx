@@ -35,7 +35,7 @@ export const DynamicIsland: React.FC<DynamicIslandProps> = ({ state, progress, m
       <div
         onClick={onClick}
         className={`
-          bg-black border border-white/10 shadow-[0_8px_40px_-12px_rgba(0,0,0,0.5)] 
+          glass-panel bg-black/20 border border-white/15 shadow-[0_8px_40px_-12px_rgba(0,0,0,0.5)] 
           rounded-[2.5rem] overflow-hidden text-white flex items-center justify-center cursor-pointer
           ${smoothTransition}
           ${isExpanded ? 'w-[360px] h-[68px] px-2' : 'w-[120px] h-[36px]'}

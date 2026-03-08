@@ -9,6 +9,7 @@ import { BookCard } from './components/BookCard';
 import { Reader } from './components/Reader';
 import { VideoCard } from './components/VideoCard';
 import { SourceSelector } from './components/SourceSelector';
+import LightPillar from './components/LightPillar';
 
 const isPlaceholderCoverUrl = (url?: string | null) => {
   if (!url) return true;
@@ -404,10 +405,22 @@ export default function App() {
         />
       )}
 
-      {/* Background Ambience */}
-      <div className="fixed inset-0 pointer-events-none">
-        <div className="absolute top-[-20%] left-[-10%] w-[50%] h-[50%] bg-indigo-900/30 rounded-full blur-[120px]" />
-        <div className="absolute bottom-[-20%] right-[-10%] w-[50%] h-[50%] bg-fuchsia-900/20 rounded-full blur-[120px]" />
+      {/* Background Ambience (Light Pillar) */}
+      <div className="fixed inset-0 pointer-events-none overflow-hidden">
+        <LightPillar
+          topColor="#5227FF"
+          bottomColor="#FF9FFC"
+          intensity={1}
+          rotationSpeed={0.3}
+          glowAmount={0.002}
+          pillarWidth={3}
+          pillarHeight={0.4}
+          noiseIntensity={0.5}
+          pillarRotation={25}
+          interactive={false}
+          mixBlendMode="screen"
+          quality="high"
+        />
       </div>
 
       <main className="relative max-w-5xl mx-auto px-6 pt-32 flex flex-col items-center min-h-[80vh]">

@@ -49,6 +49,62 @@
         border-radius: 10px;
       }
     </style>
+    <style>
+      /* 3068 书源选择器动画喵~ */
+      @keyframes source-circle-return {
+        0% { left: 0px; transform: scale(1); }
+        100% { left: calc(100% - 56px); transform: scale(1.1); }
+      }
+      @keyframes source-line-extend {
+        0% { width: 0%; opacity: 0; }
+        100% { width: 100%; opacity: 1; }
+      }
+      @keyframes source-panel-expand {
+        0% { 
+          opacity: 0; 
+          transform: translateY(-16px) scale(0.98);
+        }
+        100% { 
+          opacity: 1; 
+          transform: translateY(0) scale(1);
+        }
+      }
+      @keyframes source-item-fade-in {
+        0% { 
+          opacity: 0; 
+          transform: translateY(12px);
+        }
+        100% { 
+          opacity: 1; 
+          transform: translateY(0);
+        }
+      }
+      @keyframes glow-pulse {
+        0%, 100% { box-shadow: 0 0 20px rgba(99, 102, 241, 0.5); }
+        50% { box-shadow: 0 0 40px rgba(99, 102, 241, 0.8), 0 0 60px rgba(168, 85, 247, 0.4); }
+      }
+      @keyframes laser-shoot {
+        0% { width: 0%; filter: brightness(1); }
+        50% { filter: brightness(1.5); }
+        100% { width: 100%; filter: brightness(1); }
+      }
+      @keyframes search-shrink {
+        0% { transform: scaleX(1); border-radius: 2rem; }
+        50% { transform: scaleX(0.5); border-radius: 3rem; }
+        100% { transform: scaleX(0.08); border-radius: 50%; }
+      }
+      @keyframes search-expand {
+        0% { transform: scaleX(0.08); border-radius: 50%; opacity: 0; }
+        50% { opacity: 0.5; }
+        100% { transform: scaleX(1); border-radius: 2rem; opacity: 1; }
+      }
+      .animate-source-circle-return { animation: source-circle-return 1.2s cubic-bezier(0.4, 0, 0.2, 1) forwards; }
+      .animate-source-line-extend { animation: source-line-extend 800ms cubic-bezier(0.4, 0, 0.2, 1) forwards; }
+      .animate-source-panel-expand { animation: source-panel-expand 700ms cubic-bezier(0.4, 0, 0.2, 1) forwards; }
+      .animate-glow-pulse { animation: glow-pulse 2s ease-in-out infinite; }
+      .search-shrink { animation: search-shrink 700ms cubic-bezier(0.4, 0, 0.2, 1) forwards; }
+      .search-expand { animation: search-expand 800ms cubic-bezier(0.4, 0, 0.2, 1) forwards; }
+    </style>
 
 <link rel="stylesheet" href="/index.css">
   <script type="importmap">
@@ -63,7 +119,7 @@
   }
 }
 </script>
-  <script type="module" crossorigin src="/assets/index-CqyNDa0n.js"></script>
+  <script type="module" crossorigin src="/assets/index-S7bqdrCZ.js"></script>
 </head>
   <body class="antialiased selection:bg-indigo-500 selection:text-white">
     <div id="root"></div>
