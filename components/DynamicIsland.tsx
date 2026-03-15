@@ -8,6 +8,8 @@ interface MusicInfo {
   isPlaying: boolean;
   currentMusic: Music | null;
   isSearching?: boolean;
+  isDownloading?: boolean;
+  isDownloadComplete?: boolean;
 }
 
 type IconId = 'novel' | 'manga' | 'music';
@@ -76,7 +78,7 @@ export const DynamicIsland: React.FC<DynamicIslandProps> = ({ state, progress, m
     };
   }, []);
 
-  const isExpanded = showSuccess || state === AppState.SEARCHING || state === AppState.DOWNLOADING || state === AppState.PARSING || state === AppState.PACKING || (activeView === 'music' && musicInfo && musicInfo.currentMusic && musicInfo.isPlaying);
+  const isExpanded = showSuccess || state === AppState.SEARCHING || state === AppState.DOWNLOADING || state === AppState.PARSING || state === AppState.PACKING || (activeView === 'music' && musicInfo && (musicInfo.currentMusic && musicInfo.isPlaying || musicInfo.isSearching || musicInfo.isDownloading || musicInfo.isDownloadComplete));
   const isLongPressActive = longPressPhase === 'separated';
 
   const smoothTransition = "transition-all duration-400 ease-[cubic-bezier(0.4,0.0,0.2,1)]";
@@ -236,22 +238,36 @@ export const DynamicIsland: React.FC<DynamicIslandProps> = ({ state, progress, m
                       </div>
                     )}
                   </div>
+                ) : activeView === 'music' && musicInfo?.isSearching ? (
+                  <div className="flex items-center justify-center">
+                    <svg className="w-6 h-6 animate-spin text-indigo-300" viewBox="0 0 24 24" fill="none">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3"/>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"/>
+                    </svg>
+                  </div>
+                ) : activeView === 'music' && musicInfo?.isDownloading ? (
+                  <div className="relative flex items-center justify-center">
+                    <svg className="w-8 h-8 -rotate-90" viewBox="0 0 36 36">
+                      <path className="text-white/20" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="currentColor" strokeWidth="3" />
+                      <path 
+                        className="text-purple-400 drop-shadow-[0_0_10px_rgba(168,85,247,0.5)]" 
+                        strokeDasharray={`${progress}, 100`} 
+                        strokeDashoffset={0}
+                        d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" 
+                        fill="none" 
+                        stroke="currentColor" 
+                        strokeWidth="3"
+                      />
+                    </svg>
+                    <Download size={14} className="absolute text-purple-300 animate-bounce" />
+                  </div>
+                ) : activeView === 'music' && musicInfo?.isDownloadComplete ? (
+                  <div className="relative">
+                    <CheckCircle2 size={24} className="text-emerald-400" style={{ animation: 'scale-in 0.5s cubic-bezier(0.34,1.56,0.64,1) forwards' }} />
+                    <div className="absolute inset-0 bg-emerald-400/30 blur-lg animate-pulse" style={{ animationDuration: '1s' }} />
+                  </div>
                 ) : (
                   <>
-                    {(state === AppState.SEARCHING || (activeView === 'music' && musicInfo?.isSearching)) && (
-                      <div className="flex items-center gap-2">
-                        <div className="w-16 h-1 bg-white/20 rounded-full overflow-hidden">
-                          <div 
-                            className="h-full bg-gradient-to-r from-indigo-400 to-purple-400 rounded-full"
-                            style={{
-                              width: '60%',
-                              animation: 'progress-slide 1.5s ease-in-out infinite'
-                            }}
-                          />
-                        </div>
-                        <Search size={14} className="text-indigo-200" />
-                      </div>
-                    )}
 
                     {state === AppState.DOWNLOADING && (
                       <div className="relative flex items-center justify-center">
@@ -300,10 +316,30 @@ export const DynamicIsland: React.FC<DynamicIslandProps> = ({ state, progress, m
                       {musicInfo.currentMusic.name} - {musicInfo.currentMusic.artist} &nbsp;&nbsp;&nbsp;
                     </span>
                   </div>
+                ) : activeView === 'music' && musicInfo?.isSearching ? (
+                  <span className="text-[13px] font-bold text-white/95 truncate tracking-wide font-sans">
+                    正在搜索音乐...
+                  </span>
+                ) : activeView === 'music' && musicInfo?.isDownloading ? (
+                  <span className="text-[13px] font-bold text-white/95 truncate tracking-wide font-sans">
+                    正在下载音乐...
+                  </span>
+                ) : activeView === 'music' && musicInfo?.isDownloadComplete ? (
+                  <span className="text-[13px] font-bold text-white/95 truncate tracking-wide font-sans">
+                    下载完成
+                  </span>
                 ) : state === AppState.IDLE ? null : (
                   <>
                     <span className="text-[13px] font-bold text-white/95 truncate tracking-wide font-sans">
-                      {state === AppState.SEARCHING && "正在全网搜索..."}
+                      {state === AppState.SEARCHING && (
+                        <>
+                          <svg className="w-4 h-4 inline-block mr-2 animate-spin align-middle" viewBox="0 0 24 24" fill="none">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3"/>
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"/>
+                          </svg>
+                          正在全网搜索...
+                        </>
+                      )}
                       {state === AppState.DOWNLOADING && "正在抓取章节内容"}
                       {state === AppState.PARSING && "正在解析章节..."}
                       {state === AppState.ANALYZING && "正在获取下载链接..."}

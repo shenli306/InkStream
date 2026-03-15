@@ -29,9 +29,19 @@ export interface MusicUrlResult {
 const API_KEY = "62ccfd8be755cc5850046044c6348d6cac5ef31bd5874c1352287facc06f94c4";
 const API_BASE = "http://cyapi.top/API/qq_music.php";
 
+const isVercel = typeof window !== 'undefined' && window.location.hostname !== 'localhost';
+
 export const searchMusic = async (keyword: string, source: string = 'qq'): Promise<MusicSearchResult> => {
   try {
-    const url = `${API_BASE}?apikey=${API_KEY}&msg=${encodeURIComponent(keyword)}&num=20&type=json`;
+    const apiUrl = `${API_BASE}?apikey=${API_KEY}&msg=${encodeURIComponent(keyword)}&num=20&type=json`;
+    
+    let url: string;
+    if (isVercel) {
+      url = `/api/proxy?url=${encodeURIComponent(apiUrl)}`;
+    } else {
+      url = apiUrl;
+    }
+    
     const response = await fetch(url);
     const data = await response.json();
     
@@ -58,7 +68,15 @@ export const searchMusic = async (keyword: string, source: string = 'qq'): Promi
 
 export const getMusicUrl = async (keyword: string, index: number = 1): Promise<MusicUrlResult> => {
   try {
-    const url = `${API_BASE}?apikey=${API_KEY}&msg=${encodeURIComponent(keyword)}&num=10&type=json&n=${index}`;
+    const apiUrl = `${API_BASE}?apikey=${API_KEY}&msg=${encodeURIComponent(keyword)}&num=10&type=json&n=${index}`;
+    
+    let url: string;
+    if (isVercel) {
+      url = `/api/proxy?url=${encodeURIComponent(apiUrl)}`;
+    } else {
+      url = apiUrl;
+    }
+    
     const response = await fetch(url);
     const data = await response.json();
     

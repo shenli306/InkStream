@@ -49,8 +49,10 @@ export default function App() {
   const [activeView, setActiveView] = useState<'novel' | 'music' | 'manga'>('novel');
   
   // 音乐界面状态
-  const [musicState, setMusicState] = useState<{ isSearching: boolean; currentMusic: any; isPlaying: boolean; isLoading: boolean }>({
+  const [musicState, setMusicState] = useState<{ isSearching: boolean; isDownloading: boolean; isDownloadComplete: boolean; currentMusic: any; isPlaying: boolean; isLoading: boolean }>({
     isSearching: false,
+    isDownloading: false,
+    isDownloadComplete: false,
     currentMusic: null,
     isPlaying: false,
     isLoading: false
@@ -395,7 +397,7 @@ export default function App() {
         progress={progressPercent}
         message={progressMessage}
         activeView={activeView}
-        musicInfo={activeView === 'music' ? { isPlaying: musicState.isPlaying, currentMusic: musicState.currentMusic, isSearching: musicState.isSearching } : undefined}
+        musicInfo={activeView === 'music' ? { isPlaying: musicState.isPlaying, currentMusic: musicState.currentMusic, isSearching: musicState.isSearching, isDownloading: musicState.isDownloading, isDownloadComplete: musicState.isDownloadComplete } : undefined}
         onClick={() => {
           window.scrollTo({ top: 0, behavior: 'smooth' });
           // 如果不是在忙碌状态，点击灵动岛返回首页/搜索结果

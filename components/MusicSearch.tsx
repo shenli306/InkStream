@@ -3,16 +3,18 @@ import { Search, Loader2, ArrowRight, Play, Pause, Download, Music as MusicIcon 
 import { searchMusic, getMusicUrl, downloadMusic, Music } from '../services/musicSource';
 
 export interface MusicSearchRef {
-  getState: () => { isSearching: boolean; currentMusic: Music | null; isPlaying: boolean; isLoading: boolean };
+  getState: () => { isSearching: boolean; isDownloading: boolean; isDownloadComplete: boolean; currentMusic: Music | null; isPlaying: boolean; isLoading: boolean };
 }
 
 interface MusicSearchProps {
-  onStateChange?: (state: { isSearching: boolean; currentMusic: Music | null; isPlaying: boolean; isLoading: boolean }) => void;
+  onStateChange?: (state: { isSearching: boolean; isDownloading: boolean; isDownloadComplete: boolean; currentMusic: Music | null; isPlaying: boolean; isLoading: boolean }) => void;
 }
 
 export const MusicSearch = forwardRef<MusicSearchRef, MusicSearchProps>(({ onStateChange }, ref) => {
   const [query, setQuery] = useState('');
   const [isSearching, setIsSearching] = useState(false);
+  const [isDownloading, setIsDownloading] = useState(false);
+  const [isDownloadComplete, setIsDownloadComplete] = useState(false);
   const [results, setResults] = useState<Music[]>([]);
   const [currentMusic, setCurrentMusic] = useState<Music | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -22,12 +24,12 @@ export const MusicSearch = forwardRef<MusicSearchRef, MusicSearchProps>(({ onSta
   const audioRef = useRef<HTMLAudioElement>(null);
 
   useImperativeHandle(ref, () => ({
-    getState: () => ({ isSearching, currentMusic, isPlaying, isLoading: isLoadingUrl })
+    getState: () => ({ isSearching, isDownloading, isDownloadComplete, currentMusic, isPlaying, isLoading: isLoadingUrl })
   }));
 
   useEffect(() => {
-    onStateChange?.({ isSearching, currentMusic, isPlaying, isLoading: isLoadingUrl });
-  }, [isSearching, currentMusic, isPlaying, isLoadingUrl, onStateChange]);
+    onStateChange?.({ isSearching, isDownloading, isDownloadComplete, currentMusic, isPlaying, isLoading: isLoadingUrl });
+  }, [isSearching, isDownloading, isDownloadComplete, currentMusic, isPlaying, isLoadingUrl, onStateChange]);
 
   const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -84,17 +86,20 @@ export const MusicSearch = forwardRef<MusicSearchRef, MusicSearchProps>(({ onSta
   };
 
   const handleDownload = async (music: Music, index: number) => {
-    setIsLoadingUrl(true);
+    setIsDownloading(true);
+    setIsDownloadComplete(false);
     try {
       const data = await getMusicUrl(music.name + ' ' + music.artist, index);
       if (data.code === 200 && data.url) {
         const filename = `${music.name} - ${music.artist}.mp3`;
         await downloadMusic(data.url, filename);
+        setIsDownloadComplete(true);
+        setTimeout(() => setIsDownloadComplete(false), 2000);
       }
     } catch (error) {
       console.error('Download failed:', error);
     } finally {
-      setIsLoadingUrl(false);
+      setIsDownloading(false);
     }
   };
 
