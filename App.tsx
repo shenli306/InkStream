@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { Search, Download, ArrowRight, Loader2, Globe, FileText, CheckCircle2, AlertCircle, ChevronLeft, Play, X, Clock, Video, Image as ImageIcon, Folder, ChevronRight, Maximize2 } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { Search, Download, ArrowRight, Loader2, Globe, FileText, CheckCircle2, AlertCircle, ChevronLeft, Play, X, Video, Image as ImageIcon, Folder, ChevronRight, Maximize2 } from 'lucide-react';
 import { Novel, AppState } from './types';
 import { searchNovel, getNovelDetails, downloadAndParseNovel, fetchBlob } from './services/source';
 import { generateEpub } from './services/epub';
@@ -9,7 +9,8 @@ import { BookCard } from './components/BookCard';
 import { Reader } from './components/Reader';
 import { VideoCard } from './components/VideoCard';
 import { SourceSelector } from './components/SourceSelector';
-import LightPillar from './components/LightPillar';
+import { MusicSearch, MusicSearchRef } from './components/MusicSearch';
+import { MangaSearch } from './components/MangaSearch';
 
 const isPlaceholderCoverUrl = (url?: string | null) => {
   if (!url) return true;
@@ -43,6 +44,18 @@ export default function App() {
   const [selectedNovel, setSelectedNovel] = useState<Novel | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [scrollPosition, setScrollPosition] = useState(0);
+  
+  // 界面类型状态
+  const [activeView, setActiveView] = useState<'novel' | 'music' | 'manga'>('novel');
+  
+  // 音乐界面状态
+  const [musicState, setMusicState] = useState<{ isSearching: boolean; currentMusic: any; isPlaying: boolean; isLoading: boolean }>({
+    isSearching: false,
+    currentMusic: null,
+    isPlaying: false,
+    isLoading: false
+  });
+  const musicSearchRef = useRef<MusicSearchRef>(null);
   
   // 3068 书源选择模式喵~
   const [showSourceSelector, setShowSourceSelector] = useState(false);
@@ -177,6 +190,17 @@ export default function App() {
 
   // Reader State
   const [readingChapterIndex, setReadingChapterIndex] = useState<number | null>(null);
+
+  // 处理界面切换
+  const handleViewSwitch = (view: 'novel' | 'music' | 'manga') => {
+    setActiveView(view);
+    // 重置搜索相关状态
+    setQuery('');
+    setSearchResults([]);
+    setSelectedNovel(null);
+    setError(null);
+    setState(AppState.IDLE);
+  };
 
   const handleSearch = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
@@ -370,6 +394,8 @@ export default function App() {
         state={state}
         progress={progressPercent}
         message={progressMessage}
+        activeView={activeView}
+        musicInfo={activeView === 'music' ? { isPlaying: musicState.isPlaying, currentMusic: musicState.currentMusic, isSearching: musicState.isSearching } : undefined}
         onClick={() => {
           window.scrollTo({ top: 0, behavior: 'smooth' });
           // 如果不是在忙碌状态，点击灵动岛返回首页/搜索结果
@@ -379,6 +405,10 @@ export default function App() {
               setState(AppState.PREVIEW);
             }
           }
+        }}
+        onIconClick={(view) => {
+          // 处理图标点击，切换到对应界面并还原灵动岛
+          handleViewSwitch(view);
         }}
       />
 
@@ -415,110 +445,92 @@ export default function App() {
         />
       )}
 
-      {/* Background Ambience (Light Pillar) */}
-      <div className="fixed inset-0 pointer-events-none overflow-hidden">
-        <div
-          style={{
-            position: 'absolute',
-            inset: 0,
-            width: '100%',
-            height: '100%',
-          }}
-        >
-          <LightPillar
-            topColor="#5227FF"
-            bottomColor="#FF9FFC"
-            intensity={1}
-            rotationSpeed={0.3}
-            glowAmount={0.002}
-            pillarWidth={3}
-            pillarHeight={0.4}
-            noiseIntensity={0.5}
-            pillarRotation={25}
-            interactive={false}
-            mixBlendMode="screen"
-            quality="high"
-          />
-        </div>
-      </div>
-
       <main className="relative max-w-5xl mx-auto px-4 sm:px-6 pt-20 sm:pt-32 flex flex-col items-center min-h-[80vh]">
 
-        {/* Header */}
-        <div className={`text-center transition-all duration-500 ${state !== AppState.IDLE ? 'scale-75 opacity-50 mb-4' : 'mb-12'}`}>
-          <h1 className="text-6xl md:text-8xl font-black tracking-tighter text-transparent bg-clip-text bg-gradient-to-b from-white via-white to-white/40 drop-shadow-2xl mb-6">
-            InkStream
-          </h1>
-          <p className="text-xl text-white/50 font-light max-w-xl mx-auto flex items-center justify-center gap-2">
-            全网搜书 · 智能分章 · EPUB 打包
-          </p>
-        </div>
+        {/* 根据 activeView 显示不同界面 */}
+        {activeView === 'music' ? (
+          <MusicSearch ref={musicSearchRef} onStateChange={setMusicState} />
+        ) : activeView === 'manga' ? (
+          <MangaSearch onBack={() => handleViewSwitch('novel')} />
+        ) : (
+          <>
+            {/* Header */}
+            <div className={`text-center transition-all duration-500 ${state !== AppState.IDLE ? 'scale-75 opacity-50 mb-4' : 'mb-12'}`}>
+              <h1 className="text-6xl md:text-8xl font-black tracking-tighter text-transparent bg-clip-text bg-gradient-to-b from-white via-white to-white/40 drop-shadow-2xl mb-6">
+                InkStream
+              </h1>
+              <p className="text-xl text-white/50 font-light max-w-xl mx-auto flex items-center justify-center gap-2">
+                全网搜书 · 智能分章 · EPUB 打包
+              </p>
+            </div>
 
-        {/* Search Input */}
-        {state !== AppState.DOWNLOADING && state !== AppState.PARSING && state !== AppState.PACKING && !showSourceSelector && (
-          <div className="w-full max-w-2xl z-20 mb-12 flex flex-col items-center gap-6">
-            <form onSubmit={handleSearch} className="w-full relative group">
-              <div className="search-box-glow group-hover:opacity-40 transition-opacity duration-500"></div>
-              <div 
-                className="search-box p-2 flex items-center transition-all duration-300 focus-within:ring-2 focus-within:ring-white/20 focus-within:bg-black/40"
-                style={{ 
-                  transform: `scale(${searchBoxTransform.scale})`,
-                  opacity: searchBoxTransform.opacity,
-                }}
-              >
-                <Search className="ml-5 text-white/40" size={24} />
-                <input
-                  type="text"
-                  value={query}
-                  onChange={e => setQuery(e.target.value)}
-                  placeholder="输入小说名"
-                  className="w-full bg-transparent border-none outline-none px-4 py-4 text-lg text-white placeholder:text-white/20 font-medium"
-                />
+            {/* Search Input */}
+            {state !== AppState.DOWNLOADING && state !== AppState.PARSING && state !== AppState.PACKING && !showSourceSelector && (
+              <div className="w-full max-w-2xl z-20 mb-12 flex flex-col items-center gap-6">
+                <form onSubmit={handleSearch} className="w-full relative group">
+                  <div className="search-box-glow group-hover:opacity-40 transition-opacity duration-500"></div>
+                  <div 
+                    className="search-box p-2 flex items-center transition-all duration-300 focus-within:ring-2 focus-within:ring-white/20 focus-within:bg-black/40"
+                    style={{ 
+                      transform: `scale(${searchBoxTransform.scale})`,
+                      opacity: searchBoxTransform.opacity,
+                    }}
+                  >
+                    <Search className="ml-5 text-white/40" size={24} />
+                    <input
+                      type="text"
+                      name="search"
+                      autocomplete="off"
+                      value={query}
+                      onChange={e => setQuery(e.target.value)}
+                      placeholder="输入小说名"
+                      className="w-full bg-transparent border-none outline-none px-4 py-4 text-lg text-white placeholder:text-white/20 font-medium"
+                    />
 
-                <button
-                  type="submit"
-                  disabled={state === AppState.SEARCHING}
-                  className="bg-white text-black px-8 py-3 rounded-[1.5rem] font-bold hover:scale-105 active:scale-95 transition-all disabled:opacity-50 disabled:scale-100"
-                >
-                  {state === AppState.SEARCHING ? <Loader2 className="animate-spin" /> : <ArrowRight />}
-                </button>
-              </div>
-            </form>
+                    <button
+                      type="submit"
+                      disabled={state === AppState.SEARCHING}
+                      className="bg-white text-black px-8 py-3 rounded-[1.5rem] font-bold hover:scale-105 active:scale-95 focus-visible:ring-2 focus-visible:ring-white/50 transition-all disabled:opacity-50 disabled:scale-100"
+                    >
+                      {state === AppState.SEARCHING ? <Loader2 className="animate-spin" /> : <ArrowRight />}
+                    </button>
+                  </div>
+                </form>
 
-            {error && (
-              <div className="mt-4 flex flex-col items-center justify-center gap-2 text-red-400 bg-red-900/20 py-3 px-6 rounded-2xl border border-red-500/20 animate-in fade-in max-w-lg mx-auto text-center">
-                <div className="flex items-center gap-2">
-                  <AlertCircle size={16} />
-                  <span className="text-sm font-medium">{error}</span>
-                </div>
-                <span className="text-xs text-red-400/60">如果是网络问题，请尝试点击搜索按钮重试</span>
+                {error && (
+                  <div role="alert" aria-live="polite" className="mt-4 flex flex-col items-center justify-center gap-2 text-red-400 bg-red-900/20 py-3 px-6 rounded-2xl border border-red-500/20 animate-in fade-in max-w-lg mx-auto text-center">
+                    <div className="flex items-center gap-2">
+                      <AlertCircle size={16} />
+                      <span className="text-sm font-medium">{error}</span>
+                    </div>
+                    <span className="text-xs text-red-400/60">如果是网络问题，请尝试点击搜索按钮重试</span>
+                  </div>
+                )}
               </div>
             )}
-          </div>
-        )}
 
-        {/* 3068 Source Selector Animation 喵~ */}
-        {showSourceSelector && (
-          <div className="w-full max-w-2xl z-20 mb-12 flex flex-col items-center gap-6">
-            <SourceSelector 
-              onConfirm={() => {
-                setShowSourceSelector(false);
-                setSourceSelectorPhase('idle');
-                setSearchBoxTransform({ scale: 1, opacity: 1, borderRadius: '4rem' });
-              }}
-              onCancel={() => {
-                setShowSourceSelector(false);
-                setSourceSelectorPhase('idle');
-                setSearchBoxTransform({ scale: 1, opacity: 1, borderRadius: '4rem' });
-              }}
-            />
-          </div>
-        )}
+            {/* 3068 Source Selector Animation 喵~ */}
+            {showSourceSelector && (
+              <div className="w-full max-w-2xl z-20 mb-12 flex flex-col items-center gap-6">
+                <SourceSelector 
+                  onConfirm={() => {
+                    setShowSourceSelector(false);
+                    setSourceSelectorPhase('idle');
+                    setSearchBoxTransform({ scale: 1, opacity: 1, borderRadius: '4rem' });
+                  }}
+                  onCancel={() => {
+                    setShowSourceSelector(false);
+                    setSourceSelectorPhase('idle');
+                    setSearchBoxTransform({ scale: 1, opacity: 1, borderRadius: '4rem' });
+                  }}
+                />
+              </div>
+            )}
 
-        {/* Selected Novel Detail View */}
-        {selectedNovel && (state === AppState.PREVIEW || state === AppState.ANALYZING || state === AppState.DOWNLOADING || state === AppState.PARSING || state === AppState.PACKING || state === AppState.COMPLETE) && (
-          <div className="w-full mt-4 animate-in slide-in-from-bottom-10 fade-in duration-500 mb-20">
-            <div className="glass-panel p-8 md:p-12 border border-white/10 relative overflow-hidden">
+            {/* Selected Novel Detail View */}
+            {selectedNovel && (state === AppState.PREVIEW || state === AppState.ANALYZING || state === AppState.DOWNLOADING || state === AppState.PARSING || state === AppState.PACKING || state === AppState.COMPLETE) && (
+              <div className="w-full mt-4 animate-in slide-in-from-bottom-10 fade-in duration-500 mb-20">
+                <div className="glass-panel p-8 md:p-12 border border-white/10 relative overflow-hidden">
 
               {/* Detail Layout */}
               <div className="flex flex-col md:flex-row gap-12 relative z-10">
@@ -528,7 +540,9 @@ export default function App() {
                     {resolvedCoverUrl ? (
                       <img 
                         src={resolvedCoverUrl} 
-                        alt={selectedNovel.title} 
+                        alt={selectedNovel.title}
+                        width={192}
+                        height={288}
                         className="w-full h-full object-cover" 
                       />
                     ) : (
@@ -542,7 +556,7 @@ export default function App() {
                   {state === AppState.PREVIEW || state === AppState.COMPLETE ? (
                     <button
                       onClick={startDownloadProcess}
-                      className="w-full bg-indigo-600 hover:bg-indigo-500 text-white py-4 rounded-2xl font-bold text-lg flex items-center justify-center gap-2 shadow-[0_0_30px_-5px_rgba(79,70,229,0.5)] transition-all hover:scale-[1.02] active:scale-95"
+                      className="w-full bg-indigo-600 hover:bg-indigo-500 focus-visible:ring-2 focus-visible:ring-indigo-300 text-white py-4 rounded-2xl font-bold text-lg flex items-center justify-center gap-2 shadow-[0_0_30px_-5px_rgba(79,70,229,0.5)] transition-all hover:scale-[1.02] active:scale-95"
                     >
                       <Download size={20} />
                       {selectedNovel.sourceName === '本地书库' ? "下载本地文件" : (state === AppState.COMPLETE ? "下载完成 (点击再次下载)" : "开始抓取并打包")}
@@ -645,22 +659,6 @@ export default function App() {
             {searchResults.map((item, idx) => (
               <BookCard key={`${item.id}-${idx}-${item.sourceName}`} novel={item} onSelect={handleSelectNovel} />
             ))}
-          </div>
-        )}
-
-        {/* 搜索进度喵~ */}
-        {state === AppState.SEARCHING && (
-          <div className="w-full max-w-2xl mx-auto py-20 flex flex-col items-center gap-6 animate-in fade-in zoom-in-95 duration-500">
-            <div className="relative">
-              <div className="w-24 h-24 border-4 border-indigo-500/20 border-t-indigo-500 rounded-full animate-spin" />
-              <div className="absolute inset-0 flex items-center justify-center">
-                <Search size={32} className="text-indigo-400 animate-pulse" />
-              </div>
-            </div>
-            <div className="text-center space-y-2">
-              <h3 className="text-xl font-bold text-white">正在全网搜索中喵...</h3>
-              <p className="text-white/40 text-sm">猫娘正在努力为您寻找最棒的资源，请稍等片刻喵~</p>
-            </div>
           </div>
         )}
 
@@ -860,13 +858,15 @@ export default function App() {
           </div>
         )}
 
-        {/* No Videos Found喵~ */}
+        {/* No Videos Found 喵~ */}
         {!selectedNovel && showVideos && videoResults.length === 0 && (
           <div className="flex flex-col items-center justify-center py-20 text-white/40">
             <Video size={48} className="mb-4 opacity-20" />
             <p className="text-lg">video 文件夹里空空如也，什么都没发现喵~</p>
           </div>
         )}
+      </>
+      )}
 
       </main>
 
