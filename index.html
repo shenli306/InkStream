@@ -46,6 +46,22 @@
         border-radius: 2.5rem;
       }
 
+      /* Marquee animation for scrolling text */
+      @keyframes marquee {
+        0% { transform: translateX(0); }
+        100% { transform: translateX(-50%); }
+      }
+      
+      .marquee-container {
+        overflow: hidden;
+        white-space: nowrap;
+      }
+      
+      .marquee-text {
+        display: inline-block;
+        animation: marquee 8s linear infinite;
+      }
+
       /* Fallback for browsers that don't support backdrop-filter */
       @supports not (backdrop-filter: blur(24px)) {
         .glass-panel {
@@ -88,21 +104,33 @@
         position: relative;
         overflow: hidden;
         background: rgba(0, 0, 0, 0.22);
-        border: 1px solid rgba(255, 255, 255, 0.12);
+        border: 1px solid rgba(255, 255, 255, 0.08);
         backdrop-filter: blur(14px) saturate(160%);
         -webkit-backdrop-filter: blur(14px) saturate(160%);
         border-radius: 2rem !important;
-        box-shadow: 0 0 20px rgba(99, 102, 241, 0.2);
+        box-shadow: 0 0 20px rgba(99, 102, 241, 0.15);
+        transition: all 0.3s ease;
+      }
+      
+      .search-box:focus-within,
+      .search-box:has(input:not(:placeholder-shown)) {
+        border-color: rgba(255, 255, 255, 0.2);
+        box-shadow: 0 0 30px rgba(99, 102, 241, 0.3);
       }
 
       .search-box-glow {
         position: absolute;
         inset: 0;
-        background: linear-gradient(90deg, rgba(99, 102, 241, 0.5), rgba(168, 85, 247, 0.5), rgba(236, 72, 153, 0.5));
+        background: linear-gradient(90deg, rgba(99, 102, 241, 0.3), rgba(168, 85, 247, 0.3), rgba(236, 72, 153, 0.3));
         filter: blur(20px);
-        opacity: 0.2;
+        opacity: 0.1;
         border-radius: 2rem;
         pointer-events: none;
+        transition: opacity 0.3s ease;
+      }
+      
+      .search-box:focus-within .search-box-glow {
+        opacity: 0.25;
       }
 
       /* Fallback for browsers that don't support backdrop-filter */
@@ -111,6 +139,16 @@
           background: rgba(0, 0, 0, 0.7);
           box-shadow: 0 0 20px rgba(99, 102, 241, 0.2);
         }
+      }
+
+      /* Hide input caret/line when not focused */
+      input::placeholder {
+        color: rgba(255, 255, 255, 0.25);
+        opacity: 1;
+      }
+      
+      input:not(:focus)::placeholder {
+        color: rgba(255, 255, 255, 0.2);
       }
 
       .glass-input::before {
@@ -261,6 +299,176 @@
       @keyframes pillar-flicker {
         0%, 100% { opacity: 0.85; }
         50% { opacity: 0.5; }
+      }
+
+      /* Dynamic Island Long Press Animations */
+      @keyframes pulse {
+        0%, 100% { 
+          transform: scale(1);
+          opacity: 0.8;
+        }
+        50% { 
+          transform: scale(1.05);
+          opacity: 1;
+        }
+      }
+
+      @keyframes stretch {
+        0% { 
+          transform: scaleX(1) scaleY(1);
+        }
+        50% { 
+          transform: scaleX(1.5) scaleY(0.8);
+        }
+        100% { 
+          transform: scaleX(0) scaleY(0.5);
+          opacity: 0;
+        }
+      }
+
+      @keyframes split-left {
+        0% { 
+          transform: translateX(0) scale(0.5);
+          opacity: 0;
+        }
+        100% { 
+          transform: translateX(-60px) scale(1);
+          opacity: 1;
+        }
+      }
+
+      @keyframes split-right {
+        0% { 
+          transform: translateX(0) scale(0.5);
+          opacity: 0;
+        }
+        100% { 
+          transform: translateX(60px) scale(1);
+          opacity: 1;
+        }
+      }
+
+      @keyframes filament-stretch {
+        0% { 
+          width: 0px;
+          opacity: 0;
+        }
+        50% { 
+          opacity: 1;
+        }
+        100% { 
+          width: 160px;
+          opacity: 0.6;
+        }
+      }
+
+      @keyframes icon-appear {
+        0% { 
+          transform: scale(0) rotate(-180deg);
+          opacity: 0;
+        }
+        100% { 
+          transform: scale(1) rotate(0deg);
+          opacity: 1;
+        }
+      }
+
+      /* New optimized animations */
+      @keyframes scale-in {
+        0% { 
+          transform: scale(0);
+          opacity: 0;
+        }
+        70% {
+          transform: scale(1.15);
+        }
+        100% { 
+          transform: scale(1);
+          opacity: 1;
+        }
+      }
+
+      @keyframes flash {
+        0% { 
+          opacity: 1;
+          transform: translate(-50%, -50%) scale(0.5);
+        }
+        100% { 
+          opacity: 0;
+          transform: translate(-50%, -50%) scale(3);
+        }
+      }
+
+      @keyframes glow-pulse-fast {
+        0%, 100% { 
+          opacity: 0.4;
+          transform: scale(1);
+        }
+        50% { 
+          opacity: 0.7;
+          transform: scale(1.05);
+        }
+      }
+
+      /* Island pulse - GPU accelerated */
+      @keyframes island-pulse {
+        0%, 100% { 
+          transform: scaleY(1);
+          opacity: 1;
+        }
+        50% { 
+          transform: scaleY(1.15);
+          opacity: 0.9;
+        }
+      }
+
+      .animate-island-pulse {
+        animation: island-pulse 2s ease-in-out infinite;
+        transform-origin: center;
+        will-change: transform, opacity;
+      }
+
+      @keyframes progress-slide {
+        0% { transform: translateX(-100%); }
+        50% { transform: translateX(100%); }
+        100% { transform: translateX(200%); }
+      }
+
+      @keyframes spin {
+        from { 
+          transform: rotate(0deg); 
+        }
+        to { 
+          transform: rotate(360deg); 
+        }
+      }
+
+      /* Smooth spring animations */
+      .transition-spring {
+        transition: all 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+      }
+      
+      .transition-smooth {
+        transition: all 0.4s cubic-bezier(0.4, 0.0, 0.2, 1);
+      }
+
+      /* Icon appear animation */
+      @keyframes icon-pop {
+        0% { transform: scale(0); opacity: 0; }
+        50% { transform: scale(1.2); opacity: 0.8; }
+        100% { transform: scale(1); opacity: 1; }
+      }
+
+      /* Center flash animation */
+      @keyframes center-flash {
+        0% { transform: translate(-50%, -50%) scale(0.5); opacity: 1; box-shadow: 0 0 30px 10px rgba(255,255,255,1); }
+        100% { transform: translate(-50%, -50%) scale(2); opacity: 0; box-shadow: 0 0 60px 20px rgba(255,255,255,0); }
+      }
+
+      /* Particle burst animation */
+      @keyframes particle-burst {
+        0% { transform: translate(-50%, -50%) scale(0); opacity: 1; }
+        100% { transform: translate(var(--tx), var(--ty)) scale(0); opacity: 0; }
       }
     </style>
   <script type="importmap">
