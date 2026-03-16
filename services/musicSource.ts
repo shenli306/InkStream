@@ -553,35 +553,52 @@ const getQQMusicUrl = async (music: Music): Promise<MusicUrlResult> => {
 
 export const downloadMusic = async (url: string, filename: string): Promise<boolean> => {
   try {
+    let blob: Blob | null = null;
+    
     try {
       const proxyUrl = `/api/proxy?url=${encodeURIComponent(url)}`;
       const response = await fetch(proxyUrl);
-      
       if (response.ok) {
-        const blob = await response.blob();
-        const blobUrl = URL.createObjectURL(blob);
-        
-        const a = document.createElement('a');
-        a.href = blobUrl;
-        a.download = filename;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(blobUrl);
-        
-        return true;
+        blob = await response.blob();
       }
-    } catch (proxyError) {
-      console.log('[MusicSearch] Proxy failed, trying direct download');
+    } catch {
+      try {
+        const response = await fetch(url);
+        if (response.ok) {
+          blob = await response.blob();
+        }
+      } catch {}
     }
     
+    if (!blob) {
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      a.target = '_blank';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      return true;
+    }
+    
+    const blobUrl = URL.createObjectURL(blob);
     const a = document.createElement('a');
-    a.href = url;
+    a.href = blobUrl;
     a.download = filename;
-    a.target = '_blank';
+    a.type = blob.type || 'audio/mpeg';
+    
+    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+    if (isMobile) {
+      a.target = '_blank';
+    }
+    
     document.body.appendChild(a);
     a.click();
-    document.body.removeChild(a);
+    
+    setTimeout(() => {
+      document.body.removeChild(a);
+      URL.revokeObjectURL(blobUrl);
+    }, 1000);
     
     return true;
   } catch (e) {
