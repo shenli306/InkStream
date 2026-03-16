@@ -193,13 +193,14 @@ export const MusicSearch = forwardRef<MusicSearchRef, MusicSearchProps>(({ onSta
     try {
       const data = await getMusicUrl(music);
       if (data.code === 200 && data.url) {
-        const filename = `${music.name} - ${music.artist}.mp3`;
+        const isStreaming = /\.m4a$|\.m3u8$|stream\.qqmusic/i.test(data.url);
+        const filename = `${music.name} - ${music.artist}${isStreaming ? '.mp3' : ''}`;
         const success = await downloadMusic(data.url, filename);
         if (success) {
           setIsDownloadComplete(true);
           setTimeout(() => setIsDownloadComplete(false), 2000);
         } else {
-          setDownloadError('下载失败，请重试');
+          setDownloadError('该音源不支持下载，请尝试其他歌曲');
           setTimeout(() => setDownloadError(null), 3000);
         }
       } else {

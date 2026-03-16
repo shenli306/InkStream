@@ -552,6 +552,33 @@ const getQQMusicUrl = async (music: Music): Promise<MusicUrlResult> => {
 };
 
 export const downloadMusic = async (url: string, filename: string): Promise<boolean> => {
+  const isStreamingUrl = /\.m4a$|\.m3u8$|stream\.qqmusic|\.qqmusic\.qq/i.test(url);
+  let blobUrl = '';
+  
+  if (isStreamingUrl) {
+    try {
+      const proxyUrl = `/api/proxy?url=${encodeURIComponent(url)}`;
+      const response = await fetch(proxyUrl);
+      
+      if (response.ok) {
+        const blob = await response.blob();
+        blobUrl = URL.createObjectURL(blob);
+        
+        const a = document.createElement('a');
+        a.href = blobUrl;
+        a.download = filename.replace(/\.(m4a|m3u8)$/i, '.mp3');
+        a.type = 'audio/mpeg';
+        a.click();
+        
+        return true;
+      }
+    } catch (e) {
+      console.error('[MusicSearch] Streaming download failed:', e);
+    }
+    
+    return false;
+  }
+  
   try {
     let blob: Blob | null = null;
     
@@ -581,24 +608,12 @@ export const downloadMusic = async (url: string, filename: string): Promise<bool
       return true;
     }
     
-    const blobUrl = URL.createObjectURL(blob);
+    blobUrl = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = blobUrl;
     a.download = filename;
     a.type = blob.type || 'audio/mpeg';
-    
-    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-    if (isMobile) {
-      a.target = '_blank';
-    }
-    
-    document.body.appendChild(a);
     a.click();
-    
-    setTimeout(() => {
-      document.body.removeChild(a);
-      URL.revokeObjectURL(blobUrl);
-    }, 1000);
     
     return true;
   } catch (e) {
