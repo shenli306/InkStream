@@ -942,6 +942,105 @@ export default defineConfig(({ mode }) => {
               return;
             }
 
+            // 6. Music APIs (Migu, Kuwo, Gequke) - 使用代理方式
+            if (url.pathname === '/api/migu' || url.pathname === '/api/kuwo' || url.pathname === '/api/gequke') {
+              const keyword = url.searchParams.get('keyword');
+              if (!keyword) {
+                res.setHeader('Content-Type', 'application/json');
+                res.setHeader('Access-Control-Allow-Origin', '*');
+                res.statusCode = 400;
+                res.end(JSON.stringify({ code: 400, msg: 'Missing keyword' }));
+                return;
+              }
+
+              // 使用 proxy 代理请求
+              let targetUrl = '';
+              if (url.pathname === '/api/migu') {
+                // migu 旧 API 已废弃，返回空结果
+                res.setHeader('Content-Type', 'application/json');
+                res.setHeader('Access-Control-Allow-Origin', '*');
+                res.statusCode = 200;
+                res.end(JSON.stringify({ code: 200, results: [], msg: 'API unavailable' }));
+                return;
+              } else if (url.pathname === '/api/kuwo') {
+                // kuwo 需要复杂的验证，本地返回空结果
+                res.setHeader('Content-Type', 'application/json');
+                res.setHeader('Access-Control-Allow-Origin', '*');
+                res.statusCode = 200;
+                res.end(JSON.stringify({ code: 200, results: [], msg: 'API unavailable' }));
+                return;
+              } else if (url.pathname === '/api/gequke') {
+                targetUrl = `https://www.gequke.com/song/${encodeURIComponent(keyword)}`;
+              }
+
+              // 通过代理请求
+              import('https').then(https => {
+                const options = {
+                  method: 'GET',
+                  headers: {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+                    'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
+                  },
+                  timeout: 15000
+                };
+
+                const urlObj = new URL(targetUrl);
+                const req = https.default.request(urlObj, options, (proxyRes) => {
+                  let data = '';
+                  proxyRes.on('data', chunk => data += chunk);
+                  proxyRes.on('end', () => {
+                    res.setHeader('Content-Type', 'application/json');
+                    res.setHeader('Access-Control-Allow-Origin', '*');
+                    
+                    try {
+                      const results: any[] = [];
+                      const jsonMatches = data.match(/data\s*=\s*(\{[\s\S]*?\});/g) || [];
+                      for (const match of jsonMatches) {
+                        const dataMatch = match.match(/data\s*=\s*(\{[\s\S]*?\});/);
+                        if (dataMatch) {
+                          try {
+                            const parsed = JSON.parse(dataMatch[1]);
+                            if (Array.isArray(parsed)) {
+                              for (const item of parsed) {
+                                if (item.songmid || item.songname || item.title) {
+                                  results.push({
+                                    id: item.songmid || item.songid || Math.random(),
+                                    name: item.songname || item.title || '',
+                                    artist: item.artist || item.singer || item.author || '',
+                                    album: item.albumname || item.album || '',
+                                    cover: item.picurl || item.pic || '',
+                                    duration: item.duration || 0,
+                                    url: item.url || item.musicUrl || item.songurl || '',
+                                    source: 'gequke'
+                                  });
+                                }
+                              }
+                            }
+                          } catch (e) {}
+                        }
+                      }
+                      res.statusCode = 200;
+                      res.end(JSON.stringify({ code: results.length > 0 ? 200 : 404, results, msg: results.length > 0 ? undefined : 'No results found' }));
+                    } catch (e) {
+                      res.statusCode = 500;
+                      res.end(JSON.stringify({ code: 500, msg: e instanceof Error ? e.message : 'Parse error' }));
+                    }
+                  });
+                });
+
+                req.on('error', (e) => {
+                  res.setHeader('Content-Type', 'application/json');
+                  res.setHeader('Access-Control-Allow-Origin', '*');
+                  res.statusCode = 500;
+                  res.end(JSON.stringify({ code: 500, msg: e.message }));
+                });
+
+                req.end();
+              });
+              return;
+            }
+
             // Browser-based search for encrypted sites
             if (url.pathname === '/api/browser-search') {
               const keyword = url.searchParams.get('keyword');
