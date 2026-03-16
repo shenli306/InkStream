@@ -553,28 +553,35 @@ const getQQMusicUrl = async (music: Music): Promise<MusicUrlResult> => {
 
 export const downloadMusic = async (url: string, filename: string): Promise<boolean> => {
   try {
-    let downloadUrl = url;
-    
-    if (!url.startsWith('data:')) {
-      downloadUrl = `/api/proxy?url=${encodeURIComponent(url)}`;
+    try {
+      const proxyUrl = `/api/proxy?url=${encodeURIComponent(url)}`;
+      const response = await fetch(proxyUrl);
+      
+      if (response.ok) {
+        const blob = await response.blob();
+        const blobUrl = URL.createObjectURL(blob);
+        
+        const a = document.createElement('a');
+        a.href = blobUrl;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(blobUrl);
+        
+        return true;
+      }
+    } catch (proxyError) {
+      console.log('[MusicSearch] Proxy failed, trying direct download');
     }
-    
-    const response = await fetch(downloadUrl);
-    if (!response.ok) {
-      console.error('[MusicSearch] Download failed with status:', response.status);
-      return false;
-    }
-
-    const blob = await response.blob();
-    const blobUrl = URL.createObjectURL(blob);
     
     const a = document.createElement('a');
-    a.href = blobUrl;
+    a.href = url;
     a.download = filename;
+    a.target = '_blank';
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
-    URL.revokeObjectURL(blobUrl);
     
     return true;
   } catch (e) {
