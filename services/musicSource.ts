@@ -553,8 +553,17 @@ const getQQMusicUrl = async (music: Music): Promise<MusicUrlResult> => {
 
 export const downloadMusic = async (url: string, filename: string): Promise<boolean> => {
   try {
-    const response = await fetch(url);
-    if (!response.ok) return false;
+    let downloadUrl = url;
+    
+    if (!url.startsWith('data:')) {
+      downloadUrl = `/api/proxy?url=${encodeURIComponent(url)}`;
+    }
+    
+    const response = await fetch(downloadUrl);
+    if (!response.ok) {
+      console.error('[MusicSearch] Download failed with status:', response.status);
+      return false;
+    }
 
     const blob = await response.blob();
     const blobUrl = URL.createObjectURL(blob);

@@ -30,6 +30,7 @@ export const MusicSearch = forwardRef<MusicSearchRef, MusicSearchProps>(({ onSta
   const [playHistory, setPlayHistory] = useState<Music[]>([]);
   const [likedSongs, setLikedSongs] = useState<Set<string>>(new Set());
   const [floatingLyrics, setFloatingLyrics] = useState<{id: number; text: string; x: number; y: number; duration: number}[]>([]);
+  const [downloadError, setDownloadError] = useState<string | null>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
   const progressRef = useRef<HTMLDivElement>(null);
   const lyricIdRef = useRef(0);
@@ -188,16 +189,27 @@ export const MusicSearch = forwardRef<MusicSearchRef, MusicSearchProps>(({ onSta
   const handleDownload = async (music: Music) => {
     setIsDownloading(true);
     setIsDownloadComplete(false);
+    setDownloadError(null);
     try {
       const data = await getMusicUrl(music);
       if (data.code === 200 && data.url) {
         const filename = `${music.name} - ${music.artist}.mp3`;
-        await downloadMusic(data.url, filename);
-        setIsDownloadComplete(true);
-        setTimeout(() => setIsDownloadComplete(false), 2000);
+        const success = await downloadMusic(data.url, filename);
+        if (success) {
+          setIsDownloadComplete(true);
+          setTimeout(() => setIsDownloadComplete(false), 2000);
+        } else {
+          setDownloadError('下载失败，请重试');
+          setTimeout(() => setDownloadError(null), 3000);
+        }
+      } else {
+        setDownloadError(data.msg || '无法获取下载链接');
+        setTimeout(() => setDownloadError(null), 3000);
       }
     } catch (error) {
       console.error('Download failed:', error);
+      setDownloadError('下载失败，请重试');
+      setTimeout(() => setDownloadError(null), 3000);
     } finally {
       setIsDownloading(false);
     }
@@ -369,8 +381,26 @@ export const MusicSearch = forwardRef<MusicSearchRef, MusicSearchProps>(({ onSta
       {/* Results - Big Card Style */}
       {results.length > 0 && (
         <div className="w-full max-w-4xl z-20 mb-24">
-          <div className="text-white/60 text-sm mb-4 px-2">
-            找到 {results.length} 首歌曲
+          <div className="flex items-center justify-between mb-4 px-2">
+            <div className="text-white/60 text-sm">
+              找到 {results.length} 首歌曲
+            </div>
+            {isDownloading && (
+              <div className="text-pink-400 text-sm flex items-center gap-2">
+                <Loader2 size={14} className="animate-spin" />
+                下载中...
+              </div>
+            )}
+            {isDownloadComplete && (
+              <div className="text-green-400 text-sm">
+                下载成功
+              </div>
+            )}
+            {downloadError && (
+              <div className="text-red-400 text-sm">
+                {downloadError}
+              </div>
+            )}
           </div>
           
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -446,20 +476,20 @@ export const MusicSearch = forwardRef<MusicSearchRef, MusicSearchProps>(({ onSta
                     </div>
                   </div>
                   
-                  {/* Download Button */}
+                  {/* Download Button - always visible on desktop, show on mobile with long press */}
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
                       handleDownload(music);
                     }}
                     disabled={isDownloading}
-                    className="hidden sm:flex w-10 h-10 items-center justify-center rounded-full bg-white/5 hover:bg-white/10 transition-colors group/btn"
+                    className="flex w-10 h-10 items-center justify-center rounded-xl bg-gradient-to-r from-pink-500/20 to-rose-500/20 hover:from-pink-500/40 hover:to-rose-500/40 border border-pink-500/30 hover:border-pink-400/60 transition-all duration-300 group/btn active:scale-95"
                     title="下载歌曲"
                   >
                     {isDownloading ? (
-                      <Loader2 size={18} className="text-white/60 animate-spin" />
+                      <Loader2 size={18} className="text-pink-400 animate-spin" />
                     ) : (
-                      <Download size={18} className="text-white/60 group-hover/btn:text-pink-400 transition-colors" />
+                      <Download size={18} className="text-pink-300 group-hover/btn:text-pink-200 transition-colors" />
                     )}
                   </button>
                 </div>

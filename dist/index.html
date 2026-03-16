@@ -22,6 +22,31 @@
         font-family: 'Noto Serif SC', serif;
       }
       
+      /* Floating Lyrics Animation */
+      @keyframes float-up {
+        0% {
+          opacity: 0;
+          transform: translateY(20px) scale(0.8);
+        }
+        15% {
+          opacity: 1;
+          transform: translateY(0) scale(1);
+        }
+        85% {
+          opacity: 1;
+          transform: translateY(-20px) scale(1);
+        }
+        100% {
+          opacity: 0;
+          transform: translateY(-40px) scale(0.8);
+        }
+      }
+      .animate-float {
+        animation-name: float-up;
+        animation-timing-function: ease-in-out;
+        animation-fill-mode: both;
+      }
+      
       /* Glassmorphism Utilities */
       .glass-panel {
         position: relative;
@@ -74,18 +99,10 @@
         content: '';
         pointer-events: none;
         position: absolute;
-        inset: -40%;
-        background: radial-gradient(circle at 20% 20%, rgba(255, 255, 255, 0.22), transparent 55%),
-                    radial-gradient(circle at 70% 80%, rgba(180, 210, 255, 0.18), transparent 55%);
-        opacity: 0.7;
-        mix-blend-mode: screen;
-        animation: fluidGlass 9s ease-in-out infinite;
-      }
-
-      @keyframes fluidGlass {
-        0% { transform: translate(-12%, -12%) scale(1.05); }
-        50% { transform: translate(12%, 12%) scale(1.05); }
-        100% { transform: translate(-12%, -12%) scale(1.05); }
+        inset: 0;
+        background: linear-gradient(135deg, rgba(255,255,255,0.1) 0%, transparent 50%, rgba(255,255,255,0.05) 100%);
+        opacity: 0.5;
+        border-radius: inherit;
       }
       
       .glass-input {
@@ -485,7 +502,7 @@
   }
 }
 </script>
-  <script type="module" crossorigin src="/assets/index-HAAtZAgF.js"></script>
+  <script type="module" crossorigin src="/assets/index-G7w0wY2V.js"></script>
 </head>
   <body class="antialiased selection:bg-indigo-500 selection:text-white">
     <div id="root"></div>
