@@ -25,7 +25,7 @@ export default async function handler(req) {
 
     const html = await response.text();
     
-    const results: any[] = [];
+    const results = [];
     
     const jsonMatches = html.match(/data\s*=\s*(\{[\s\S]*?\});/g) || [];
     for (const match of jsonMatches) {
