@@ -147,7 +147,7 @@ export const DynamicIsland: React.FC<DynamicIslandProps> = ({ state, progress, m
 
   return (
     <div 
-      className={`fixed top-[calc(env(safe-area-inset-top)+1rem)] left-1/2 -translate-x-1/2 z-[100] w-[min(90vw,48rem)] max-w-2xl h-[80px] flex items-center justify-center`}
+      className={`fixed top-[calc(env(safe-area-inset-top)+1rem)] left-1/2 -translate-x-1/2 z-[100] w-[min(90vw,360px)] h-[80px] flex items-center justify-center`}
       role="button"
       tabIndex={0}
       aria-label="灵动岛"
@@ -379,10 +379,10 @@ function getIslandSize(isExpanded: boolean, longPressPhase: LongPressPhase, pres
   }
 
   if (longPressPhase === 'expanding') {
-    return isExpanded ? 'w-[min(90vw,48rem)] max-w-2xl h-[68px] px-2' : 'w-[min(40vw,120px)] h-[36px]';
+    return isExpanded ? 'w-[min(90vw,360px)] h-[68px] px-2' : 'w-[min(40vw,120px)] h-[36px]';
   }
 
-  return isExpanded ? 'w-[min(90vw,48rem)] max-w-2xl h-[68px] px-2' : 'w-[min(40vw,120px)] h-[36px]';
+  return isExpanded ? 'w-[min(90vw,360px)] h-[68px] px-2' : 'w-[min(40vw,120px)] h-[36px]';
 }
 
 // 获取圆角 - 优化过渡曲线
