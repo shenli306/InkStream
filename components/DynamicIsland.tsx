@@ -176,6 +176,7 @@ export const DynamicIsland: React.FC<DynamicIslandProps> = ({ state, progress, m
             touchAction: 'none',
             transform: 'translateZ(0)',
             backfaceVisibility: 'hidden',
+            transformOrigin: 'center',
           }}
         >
           {/* 长按进度条 - 线性 */}
