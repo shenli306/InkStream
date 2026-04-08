@@ -53,6 +53,17 @@ export default defineConfig(({ mode }) => {
             'Origin': 'https://www.23ddw.net',
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
           }
+        },
+        '/proxy/alicesw': {
+          target: 'https://www.alicesw.com',
+          changeOrigin: true,
+          secure: false,
+          rewrite: (path) => path.replace(/^\/proxy\/alicesw/, ''),
+          headers: {
+            'Referer': 'https://www.alicesw.com/',
+            'Origin': 'https://www.alicesw.com',
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+          }
         }
       }
     },
