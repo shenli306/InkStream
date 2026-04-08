@@ -2504,88 +2504,86 @@ const aliceswProvider: SourceProvider = {
   search: async (keyword: string): Promise<Novel[]> => {
     console.log(`[AliceSw] Searching for: ${keyword}喵~`);
     try {
-      const searchUrl = `${ALICESW_URL}/search?q=${encodeURIComponent(keyword)}`;
-      const html = await fetchText(searchUrl);
-      const doc = parseHTML(html);
       const results: Novel[] = [];
       const seenUrls = new Set<string>();
       
-      const items = doc.querySelectorAll('[class*="book"], [class*="item"], article, .card');
-      
-      items.forEach((item) => {
-        const titleLink = item.querySelector('a[href*="/book/"], a[href*="/novel/"], h1 a, h2 a, h3 a');
-        if (!titleLink) return;
+      // 尝试获取多页结果
+      for (let page = 1; page <= 3; page++) {
+        const searchUrl = `${ALICESW_URL}/search?q=${encodeURIComponent(keyword)}&page=${page}`;
+        console.log(`[AliceSw] Fetching page ${page}: ${searchUrl}`);
         
-        const title = titleLink.textContent?.trim() || '';
-        const href = titleLink.getAttribute('href');
-        if (!title || !href) return;
-        
-        const detailUrl = href.startsWith('http') ? href : new URL(href, ALICESW_URL).href;
-        
-        if (seenUrls.has(detailUrl) || !isRelevant(title, '', keyword)) return;
-        seenUrls.add(detailUrl);
-        
-        const authorEl = item.querySelector('[class*="author"], .writer, span:has(+span), .author-name');
-        let author = '未知';
-        if (authorEl) {
-          const authorText = authorEl.textContent?.trim() || '';
-          author = authorText.replace(/作者[：:]\s*/, '').trim();
-        }
-        
-        const coverImg = item.querySelector('img');
-        let coverUrl = coverImg?.getAttribute('src') || coverImg?.getAttribute('data-src') || '';
-        if (coverUrl && !coverUrl.startsWith('http')) {
-          coverUrl = new URL(coverUrl, ALICESW_URL).href;
-        }
-        coverUrl = proxifyImage(coverUrl);
-        
-        const descEl = item.querySelector('[class*="desc"], .description, .intro, p');
-        const description = descEl?.textContent?.trim() || '';
-        
-        results.push({
-          id: detailUrl,
-          title,
-          author,
-          coverUrl,
-          description,
-          tags: [],
-          status: 'Unknown',
-          detailUrl,
-          chapters: [],
-          sourceName: '爱丽丝书屋'
-        });
-      });
-      
-      if (results.length === 0) {
-        const allLinks = doc.querySelectorAll('a');
-        allLinks.forEach(link => {
-          const href = link.getAttribute('href');
-          if (!href) return;
+        try {
+          const html = await fetchText(searchUrl);
+          const doc = parseHTML(html);
           
-          const isBookUrl = href.includes('/book/') || href.includes('/novel/');
-          if (!isBookUrl) return;
+          const items = doc.querySelectorAll('[class*="book"], [class*="item"], article, .card, .search-result-item');
           
-          const title = link.textContent?.trim() || '';
-          if (!title || title.length < 2) return;
+          let pageHasResults = false;
           
-          const detailUrl = href.startsWith('http') ? href : new URL(href, ALICESW_URL).href;
-          
-          if (seenUrls.has(detailUrl) || !isRelevant(title, '', keyword)) return;
-          seenUrls.add(detailUrl);
-          
-          results.push({
-            id: detailUrl,
-            title,
-            author: '未知',
-            coverUrl: '',
-            description: '',
-            tags: [],
-            status: 'Unknown',
-            detailUrl,
-            chapters: [],
-            sourceName: '爱丽丝书屋'
+          items.forEach((item) => {
+            const titleLink = item.querySelector('a[href*="/book/"], a[href*="/novel/"], h1 a, h2 a, h3 a');
+            if (!titleLink) return;
+            
+            let title = titleLink.textContent?.trim() || '';
+            // 清洗标题，去除数字前缀如 "1."、"2." 等
+            title = title.replace(/^\d+\.\s*/, '').trim();
+            
+            const href = titleLink.getAttribute('href');
+            if (!title || !href) return;
+            
+            const detailUrl = href.startsWith('http') ? href : new URL(href, ALICESW_URL).href;
+            
+            if (seenUrls.has(detailUrl) || !isRelevant(title, '', keyword)) return;
+            seenUrls.add(detailUrl);
+            pageHasResults = true;
+            
+            const authorEl = item.querySelector('[class*="author"], .writer, span:has(+span), .author-name');
+            let author = '未知';
+            if (authorEl) {
+              const authorText = authorEl.textContent?.trim() || '';
+              author = authorText.replace(/作者[：:]\s*/, '').trim();
+            }
+            
+            // 搜索结果页可能没有封面，先设为空，后续在 getDetails 中获取
+            let coverUrl = '';
+            const coverImg = item.querySelector('img');
+            if (coverImg) {
+              let src = coverImg.getAttribute('src') || coverImg.getAttribute('data-src') || '';
+              if (src && !src.startsWith('http')) {
+                src = new URL(src, ALICESW_URL).href;
+              }
+              if (src) {
+                coverUrl = proxifyImage(src);
+              }
+            }
+            
+            const descEl = item.querySelector('[class*="desc"], .description, .intro, p');
+            const description = descEl?.textContent?.trim() || '';
+            
+            results.push({
+              id: detailUrl,
+              title,
+              author,
+              coverUrl,
+              description,
+              tags: [],
+              status: 'Unknown',
+              detailUrl,
+              chapters: [],
+              sourceName: '爱丽丝书屋'
+            });
           });
-        });
+          
+          // 如果当前页没有结果，停止分页
+          if (!pageHasResults) break;
+          
+          // 限制结果数量，避免过多
+          if (results.length >= 50) break;
+          
+        } catch (pageError) {
+          console.warn(`[AliceSw] Failed to fetch page ${page}`, pageError);
+          break;
+        }
       }
       
       console.log(`[AliceSw] Found ${results.length} results 喵~`);
@@ -2597,131 +2595,175 @@ const aliceswProvider: SourceProvider = {
   },
   getDetails: async (novel: Novel): Promise<Novel> => {
     console.log(`[AliceSw] Getting details for: ${novel.title} from ${novel.detailUrl}喵~`);
-    const html = await fetchText(novel.detailUrl);
-    const doc = parseHTML(html);
-    
-    const titleEl = doc.querySelector('h1, h2, [class*="title"]');
-    if (titleEl) novel.title = titleEl.textContent?.trim() || novel.title;
-    
-    const authorLabel = Array.from(doc.querySelectorAll('span, div, p')).find(el => el.textContent?.includes('作者'));
-    if (authorLabel) {
-      const authorText = authorLabel.textContent || '';
-      if (authorText.includes(':')) {
-        novel.author = authorText.split(':')[1].trim();
-      } else if (authorText.includes('：')) {
-        novel.author = authorText.split('：')[1].trim();
-      } else if (authorLabel.nextElementSibling) {
-        novel.author = authorLabel.nextElementSibling.textContent?.trim() || novel.author;
+    try {
+      const html = await fetchText(novel.detailUrl);
+      const doc = parseHTML(html);
+      
+      const titleEl = doc.querySelector('h1, h2, [class*="title"]');
+      if (titleEl) {
+        let title = titleEl.textContent?.trim() || novel.title;
+        // 清洗标题，去除数字前缀
+        title = title.replace(/^\d+\.\s*/, '').trim();
+        novel.title = title;
       }
-    }
-    
-    const descEl = doc.querySelector('[class*="desc"], .description, .intro, .summary, article p');
-    if (descEl) {
-      descEl.querySelectorAll('img').forEach(img => img.remove());
-      novel.description = descEl.textContent?.trim() || novel.description;
-    }
-    
-    if (!novel.coverUrl) {
-      const coverImg = doc.querySelector('img[src*="cover"], img[class*="cover"], [class*="book-img"] img, .cover img');
-      if (coverImg) {
-        let src = coverImg.getAttribute('src') || coverImg.getAttribute('data-src') || '';
-        if (src && !src.startsWith('http')) {
-          src = new URL(src, ALICESW_URL).href;
+      
+      const authorLabel = Array.from(doc.querySelectorAll('span, div, p')).find(el => el.textContent?.includes('作者'));
+      if (authorLabel) {
+        const authorText = authorLabel.textContent || '';
+        if (authorText.includes(':')) {
+          novel.author = authorText.split(':')[1].trim();
+        } else if (authorText.includes('：')) {
+          novel.author = authorText.split('：')[1].trim();
+        } else if (authorLabel.nextElementSibling) {
+          novel.author = authorLabel.nextElementSibling.textContent?.trim() || novel.author;
         }
-        novel.coverUrl = proxifyImage(src);
       }
-    }
-    
-    const chapters: Chapter[] = [];
-    const chapterLinks = doc.querySelectorAll('[class*="chapter"] a, .catalog a, #list a, .chapterlist a, .list-chapter a');
-    
-    chapterLinks.forEach((link, index) => {
-      const href = link.getAttribute('href');
-      if (!href) return;
       
-      const fullUrl = href.startsWith('http') ? href : new URL(href, novel.detailUrl).href;
-      const title = link.textContent?.trim() || `第${index + 1}章`;
-      
-      if (!chapters.find(c => c.url === fullUrl)) {
-        chapters.push({
-          number: chapters.length + 1,
-          title,
-          url: fullUrl
-        });
+      const descEl = doc.querySelector('[class*="desc"], .description, .intro, .summary, article p');
+      if (descEl) {
+        descEl.querySelectorAll('img').forEach(img => img.remove());
+        novel.description = descEl.textContent?.trim() || novel.description;
       }
-    });
-    
-    if (chapters.length === 0) {
-      const allLinks = doc.querySelectorAll('a');
-      allLinks.forEach((link, index) => {
+      
+      // 增强封面获取逻辑
+      if (!novel.coverUrl) {
+        const coverSelectors = [
+          'img[src*="cover"], img[class*="cover"], [class*="book-img"] img, .cover img',
+          '.book-cover img, .novel-cover img, .cover-image img',
+          'img[src*="jpg"], img[src*="png"], img[src*="gif"]'
+        ];
+        
+        for (const selector of coverSelectors) {
+          const coverImg = doc.querySelector(selector);
+          if (coverImg) {
+            let src = coverImg.getAttribute('src') || coverImg.getAttribute('data-src') || '';
+            if (src && !src.startsWith('http')) {
+              src = new URL(src, ALICESW_URL).href;
+            }
+            if (src) {
+              novel.coverUrl = proxifyImage(src);
+              break;
+            }
+          }
+        }
+      }
+      
+      const chapters: Chapter[] = [];
+      const chapterLinks = doc.querySelectorAll('[class*="chapter"] a, .catalog a, #list a, .chapterlist a, .list-chapter a, .chapter-item a');
+      
+      chapterLinks.forEach((link, index) => {
         const href = link.getAttribute('href');
-        const text = link.textContent?.trim() || '';
         if (!href) return;
         
-        const isChapter = text.includes('章') || text.includes('第') || 
-                         (href.includes('/chapter/') || href.includes('/read/'));
-        if (!isChapter) return;
-        
         const fullUrl = href.startsWith('http') ? href : new URL(href, novel.detailUrl).href;
+        let title = link.textContent?.trim() || `第${index + 1}章`;
+        // 清洗章节标题
+        title = title.replace(/^\d+\.\s*/, '').trim();
+        
         if (!chapters.find(c => c.url === fullUrl)) {
           chapters.push({
             number: chapters.length + 1,
-            title: text,
+            title,
             url: fullUrl
           });
         }
       });
+      
+      if (chapters.length === 0) {
+        const allLinks = doc.querySelectorAll('a');
+        allLinks.forEach((link, index) => {
+          const href = link.getAttribute('href');
+          const text = link.textContent?.trim() || '';
+          if (!href) return;
+          
+          const isChapter = text.includes('章') || text.includes('第') || 
+                           (href.includes('/chapter/') || href.includes('/read/'));
+          if (!isChapter) return;
+          
+          const fullUrl = href.startsWith('http') ? href : new URL(href, novel.detailUrl).href;
+          let title = text;
+          // 清洗章节标题
+          title = title.replace(/^\d+\.\s*/, '').trim();
+          
+          if (!chapters.find(c => c.url === fullUrl)) {
+            chapters.push({
+              number: chapters.length + 1,
+              title,
+              url: fullUrl
+            });
+          }
+        });
+      }
+      
+      if (chapters.length === 0) throw new Error("未找到章节列表喵~");
+      
+      return { ...novel, chapters };
+    } catch (e) {
+      console.warn('[AliceSw] Failed to get details', e);
+      throw e;
     }
-    
-    if (chapters.length === 0) throw new Error("未找到章节列表喵~");
-    
-    return { ...novel, chapters };
   },
   getChapterContent: async (chapter: Chapter): Promise<string> => {
     console.log(`[AliceSw] Getting content for: ${chapter.title}喵~`);
-    const html = await fetchText(chapter.url);
-    const doc = parseHTML(html);
-    
-    const contentEl = doc.querySelector('#content') || 
-                     doc.querySelector('.content') || 
-                     doc.querySelector('[class*="article"]') || 
-                     doc.querySelector('[class*="read-content"]') ||
-                     doc.querySelector('article');
-    if (!contentEl) throw new Error("未找到章节内容喵~");
-    
-    contentEl.querySelectorAll('script, style, ins, .ads, .ad, .advertisement, a').forEach(el => el.remove());
-    
-    let text = contentEl.innerHTML
-      .replace(/<br\s*\/?>/gi, '\n')
-      .replace(/<p[^>]*>/gi, '')
-      .replace(/<\/p>/gi, '\n\n')
-      .replace(/&nbsp;/g, ' ')
-      .replace(/&lt;/g, '<')
-      .replace(/&gt;/g, '>')
-      .replace(/&amp;/g, '&');
-    
-    const tempDiv = document.createElement('div');
-    tempDiv.innerHTML = text;
-    let cleanText = tempDiv.textContent || "";
-    
-    const junkKeywords = [
-      '爱丽丝书屋', 'alicesw.com', 'www.alicesw.com', 'https://www.alicesw.com',
-      '目录', '上一页', '下一页', '尾页', '首页', '返回目录',
-      '章节报错', '免登录', '推荐本书', '加入书架'
-    ];
-    
-    const lines = cleanText.split('\n')
-      .map(line => line.trim())
-      .filter(line => {
-        if (line.length === 0) return false;
-        if (line.length < 20) {
-          const navTerms = ['目录', '上一页', '下一页', '尾页', '首页', '返回目录'];
-          if (navTerms.some(term => line === term)) return false;
-        }
-        return !junkKeywords.some(kw => line.includes(kw));
-      });
-    
-    return lines.join('\n\n');
+    try {
+      const html = await fetchText(chapter.url);
+      const doc = parseHTML(html);
+      
+      // 增强内容元素选择器
+      const contentEl = doc.querySelector('#content') || 
+                       doc.querySelector('.content') || 
+                       doc.querySelector('[class*="article"]') || 
+                       doc.querySelector('[class*="read-content"]') ||
+                       doc.querySelector('article') ||
+                       doc.querySelector('.chapter-content') ||
+                       doc.querySelector('.read-content') ||
+                       doc.querySelector('.text-content');
+      
+      if (!contentEl) throw new Error("未找到章节内容喵~");
+      
+      // 移除不需要的元素
+      contentEl.querySelectorAll('script, style, ins, .ads, .ad, .advertisement, a, .nav, .footer, .header').forEach(el => el.remove());
+      
+      let text = contentEl.innerHTML
+        .replace(/<br\s*\/?>/gi, '\n')
+        .replace(/<p[^>]*>/gi, '')
+        .replace(/<\/p>/gi, '\n\n')
+        .replace(/&nbsp;/g, ' ')
+        .replace(/&lt;/g, '<')
+        .replace(/&gt;/g, '>')
+        .replace(/&amp;/g, '&');
+      
+      const tempDiv = document.createElement('div');
+      tempDiv.innerHTML = text;
+      let cleanText = tempDiv.textContent || "";
+      
+      const junkKeywords = [
+        '爱丽丝书屋', 'alicesw.com', 'www.alicesw.com', 'https://www.alicesw.com',
+        '目录', '上一页', '下一页', '尾页', '首页', '返回目录',
+        '章节报错', '免登录', '推荐本书', '加入书架', '阅读模式', '夜间模式'
+      ];
+      
+      const lines = cleanText.split('\n')
+        .map(line => line.trim())
+        .filter(line => {
+          if (line.length === 0) return false;
+          if (line.length < 20) {
+            const navTerms = ['目录', '上一页', '下一页', '尾页', '首页', '返回目录'];
+            if (navTerms.some(term => line === term)) return false;
+          }
+          return !junkKeywords.some(kw => line.includes(kw));
+        });
+      
+      const result = lines.join('\n\n');
+      if (!result || result.trim().length < 100) {
+        throw new Error("章节内容为空或过短喵~");
+      }
+      
+      return result;
+    } catch (e) {
+      console.warn('[AliceSw] Failed to get chapter content', e);
+      throw e;
+    }
   }
 };
 
