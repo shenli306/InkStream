@@ -147,12 +147,11 @@ export const DynamicIsland: React.FC<DynamicIslandProps> = ({ state, progress, m
 
   return (
     <div 
-      className={`fixed top-[calc(env(safe-area-inset-top)+1rem)] left-1/2 -translate-x-1/2 z-[100] ${longPressPhase === 'expanding' ? expandTransition : smoothTransition}`}
+      className={`fixed top-[calc(env(safe-area-inset-top)+1rem)] left-1/2 -translate-x-1/2 z-[100] w-[min(90vw,360px)] h-[80px] flex items-center justify-center`}
       role="button"
       tabIndex={0}
       aria-label="灵动岛"
       onKeyDown={handleKeyDown}
-      style={{ willChange: 'transform, width, height, border-radius', userSelect: 'none', caretColor: 'transparent', transform: 'translateZ(0)' }}
     >
       {/* 主灵动岛容器 */}
       {longPressPhase !== 'separated' ? (
@@ -172,10 +171,13 @@ export const DynamicIsland: React.FC<DynamicIslandProps> = ({ state, progress, m
           `}
           style={{
             borderRadius: getBorderRadius(longPressPhase, pressProgress),
-            willChange: 'transform, width, height, border-radius',
+            willChange: 'width, height, border-radius',
             touchAction: 'none',
-            transform: 'translateZ(0)',
             backfaceVisibility: 'hidden',
+            position: 'absolute',
+            left: '50%',
+            top: '50%',
+            transform: 'translate(-50%, -50%)',
           }}
         >
           {/* 长按进度条 - 线性 */}

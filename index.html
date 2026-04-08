@@ -69,6 +69,7 @@
         border: 1px solid rgba(255, 255, 255, 0.15);
         box-shadow: 0 8px 40px -12px rgba(0, 0, 0, 0.5), 0 0 20px rgba(99, 102, 241, 0.3);
         border-radius: 2.5rem;
+        transform-origin: center;
       }
 
       /* Marquee animation for scrolling text */
@@ -220,6 +221,12 @@
       }
     </style>
     <style>
+      /* 确保灵动岛从中心展开 */
+      .dynamic-island-wrapper,
+      .dynamic-island-inner {
+        transform-origin: center !important;
+      }
+      
       /* 3068 书源选择器动画喵~ */
       @keyframes source-circle-return {
         0% { left: 0px; transform: scale(1); }
