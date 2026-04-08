@@ -105,16 +105,10 @@ export const DynamicIsland: React.FC<DynamicIslandProps> = ({ state, progress, m
     };
 
     animationFrameRef.current = requestAnimationFrame(animatePress);
-
-    pressTimerRef.current = window.setTimeout(() => {
-      if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
-      setLongPressPhase('shrinking');
-    }, 500);
   }, [isExpanded, isLongPressActive, longPressPhase]);
 
   const handlePressEnd = useCallback(() => {
     if (longPressPhase === 'pressing' || longPressPhase === 'shrinking') {
-      if (pressTimerRef.current) clearTimeout(pressTimerRef.current);
       if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
       
       if (longPressPhase === 'pressing' && pressProgress < 1) {
@@ -158,7 +152,7 @@ export const DynamicIsland: React.FC<DynamicIslandProps> = ({ state, progress, m
       tabIndex={0}
       aria-label="灵动岛"
       onKeyDown={handleKeyDown}
-      style={{ willChange: 'transform, width, height, border-radius', userSelect: 'none', caretColor: 'transparent' }}
+      style={{ willChange: 'transform, width, height, border-radius', userSelect: 'none', caretColor: 'transparent', transform: 'translateZ(0)' }}
     >
       {/* 主灵动岛容器 */}
       {longPressPhase !== 'separated' ? (
@@ -691,7 +685,8 @@ const SeparatedIcons: React.FC<SeparatedIconsProps> = React.memo(({ onClick, onR
     setIsAnimating(true);
     setSlideDirection(direction);
 
-    setTimeout(() => {
+    // 使用 requestAnimationFrame 替代 setTimeout 以获得更流畅的动画
+    const animationId = requestAnimationFrame(() => {
       setIcons(prev => {
         let newIcons = [...prev];
         
@@ -733,8 +728,10 @@ const SeparatedIcons: React.FC<SeparatedIconsProps> = React.memo(({ onClick, onR
             }
           }, 50);
         }
-      }, 50);
-    }, 300);
+      }, 300);
+    });
+
+    return () => cancelAnimationFrame(animationId);
   };
 
   // 处理图标点击 - 直接将点击的图标移到中间
