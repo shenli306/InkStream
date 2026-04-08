@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { Search, Download, ArrowRight, Loader2, Globe, FileText, CheckCircle2, AlertCircle, ChevronLeft, Play, X, Video, Image as ImageIcon, Folder, ChevronRight, Maximize2 } from 'lucide-react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { Search, Download, ArrowRight, Loader2, Globe, FileText, CheckCircle2, AlertCircle, ChevronLeft, Play, X, Video, Image as ImageIcon, Folder, ChevronRight, Maximize2, Book, BookOpen, Music as LucideMusic } from 'lucide-react';
 import { Novel, AppState } from './types';
 import { searchNovel, getNovelDetails, downloadAndParseNovel, fetchBlob } from './services/source';
 import { generateEpub } from './services/epub';
@@ -25,6 +25,8 @@ const isPlaceholderCoverUrl = (url?: string | null) => {
     decoded.includes('暂无封面');
 };
 
+
+
 const resolveCoverUrl = (url?: string | null) => {
   if (!url || isPlaceholderCoverUrl(url)) return null;
   if (url.startsWith('/api/')) return url;
@@ -44,6 +46,13 @@ export default function App() {
   const [selectedNovel, setSelectedNovel] = useState<Novel | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [scrollPosition, setScrollPosition] = useState(0);
+  
+  // 检测设备类型
+  const isMobile = useMemo(() => {
+    if (typeof window === 'undefined') return false;
+    const userAgent = window.navigator.userAgent.toLowerCase();
+    return /android|webos|iphone|ipad|ipod|blackberry|iemobile|opera mini/i.test(userAgent);
+  }, []);
   
   // 界面类型状态
   const [activeView, setActiveView] = useState<'novel' | 'music' | 'manga'>('novel');
@@ -457,11 +466,11 @@ export default function App() {
         ) : (
           <>
             {/* Header */}
-            <div className={`text-center transition-all duration-500 ${state !== AppState.IDLE ? 'scale-75 opacity-50 mb-4' : 'mb-12'}`}>
-              <h1 className="text-6xl md:text-8xl font-black tracking-tighter text-transparent bg-clip-text bg-gradient-to-b from-white via-white to-white/40 drop-shadow-2xl mb-6">
+            <div className={`text-center transition-all duration-500 ${state !== AppState.IDLE ? 'scale-75 opacity-50 mb-4' : isMobile ? 'mb-8' : 'mb-12'}`}>
+              <h1 className={`font-black tracking-tighter text-transparent bg-clip-text bg-gradient-to-b from-white via-white to-white/40 drop-shadow-2xl mb-4 ${isMobile ? 'text-4xl sm:text-5xl' : 'text-6xl md:text-8xl'}`}>
                 InkStream
               </h1>
-              <p className="text-xl text-white/50 font-light max-w-xl mx-auto flex items-center justify-center gap-2">
+              <p className={`text-white/50 font-light max-w-xl mx-auto flex items-center justify-center gap-2 ${isMobile ? 'text-sm sm:text-base' : 'text-xl'}`}>
                 全网搜书 · 智能分章 · EPUB 打包
               </p>
             </div>
@@ -478,7 +487,7 @@ export default function App() {
                       opacity: searchBoxTransform.opacity,
                     }}
                   >
-                    <Search className="ml-5 text-white/40" size={24} />
+                    <Search className={isMobile ? "ml-3 text-white/40" : "ml-5 text-white/40"} size={isMobile ? 20 : 24} />
                     <input
                       type="text"
                       name="search"
@@ -486,15 +495,15 @@ export default function App() {
                       value={query}
                       onChange={e => setQuery(e.target.value)}
                       placeholder="输入小说名"
-                      className="w-full bg-transparent border-none outline-none px-4 py-4 text-lg text-white placeholder:text-white/20 font-medium"
+                      className={`w-full bg-transparent border-none outline-none ${isMobile ? 'px-3 py-3 text-base' : 'px-4 py-4 text-lg'} text-white placeholder:text-white/20 font-medium`}
                     />
 
                     <button
                       type="submit"
                       disabled={state === AppState.SEARCHING}
-                      className="bg-white text-black px-8 py-3 rounded-[1.5rem] font-bold hover:scale-105 active:scale-95 focus-visible:ring-2 focus-visible:ring-white/50 transition-all disabled:opacity-50 disabled:scale-100"
+                      className={`bg-white text-black ${isMobile ? 'px-6 py-2' : 'px-8 py-3'} rounded-[1.5rem] font-bold hover:scale-105 active:scale-95 focus-visible:ring-2 focus-visible:ring-white/50 transition-all disabled:opacity-50 disabled:scale-100`}
                     >
-                      {state === AppState.SEARCHING ? <Loader2 className="animate-spin" /> : <ArrowRight />}
+                      {state === AppState.SEARCHING ? <Loader2 className="animate-spin" size={isMobile ? 16 : 20} /> : <ArrowRight size={isMobile ? 16 : 20} />}
                     </button>
                   </div>
                 </form>
@@ -657,7 +666,7 @@ export default function App() {
 
         {/* Search Results List (Grid) */}
         {!selectedNovel && searchResults.length > 0 && (
-          <div className="w-full grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 animate-in fade-in slide-in-from-bottom-5">
+          <div className={`w-full grid ${isMobile ? 'grid-cols-1' : 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3'} gap-6 animate-in fade-in slide-in-from-bottom-5`}>
             {searchResults.map((item, idx) => (
               <BookCard key={`${item.id}-${idx}-${item.sourceName}`} novel={item} onSelect={handleSelectNovel} />
             ))}
@@ -871,6 +880,33 @@ export default function App() {
       )}
 
       </main>
+
+      {/* 手机端底部导航栏 */}
+      {isMobile && (
+        <div className="fixed bottom-0 left-0 right-0 bg-black/80 backdrop-blur-xl border-t border-white/10 py-3 px-4 flex justify-around items-center z-50">
+          <button
+            onClick={() => handleViewSwitch('novel')}
+            className={`flex flex-col items-center gap-1 ${activeView === 'novel' ? 'text-white' : 'text-white/40'}`}
+          >
+            <Book size={20} />
+            <span className="text-xs">小说</span>
+          </button>
+          <button
+            onClick={() => handleViewSwitch('manga')}
+            className={`flex flex-col items-center gap-1 ${activeView === 'manga' ? 'text-white' : 'text-white/40'}`}
+          >
+            <BookOpen size={20} />
+            <span className="text-xs">漫画</span>
+          </button>
+          <button
+            onClick={() => handleViewSwitch('music')}
+            className={`flex flex-col items-center gap-1 ${activeView === 'music' ? 'text-white' : 'text-white/40'}`}
+          >
+            <LucideMusic size={20} />
+            <span className="text-xs">音乐</span>
+          </button>
+        </div>
+      )}
 
     </div>
   );
