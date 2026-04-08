@@ -377,10 +377,10 @@ function getIslandSize(isExpanded: boolean, longPressPhase: LongPressPhase, pres
   }
 
   if (longPressPhase === 'expanding') {
-    return isExpanded ? 'w-[min(90vw,360px)] h-[68px] px-2' : 'w-[min(40vw,120px)] h-[36px]';
+    return isExpanded ? 'w-[min(90vw,48rem)] max-w-2xl h-[68px] px-2' : 'w-[min(40vw,120px)] h-[36px]';
   }
 
-  return isExpanded ? 'w-[min(90vw,360px)] h-[68px] px-2' : 'w-[min(40vw,120px)] h-[36px]';
+  return isExpanded ? 'w-[min(90vw,48rem)] max-w-2xl h-[68px] px-2' : 'w-[min(40vw,120px)] h-[36px]';
 }
 
 // 获取圆角 - 优化过渡曲线
