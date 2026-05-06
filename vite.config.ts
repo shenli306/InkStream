@@ -64,6 +64,17 @@ export default defineConfig(({ mode }) => {
             'Origin': 'https://www.alicesw.com',
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
           }
+        },
+        '/proxy/xpxs': {
+          target: 'https://www.xpxs.net',
+          changeOrigin: true,
+          secure: false,
+          rewrite: (path) => path.replace(/^\/proxy\/xpxs/, ''),
+          headers: {
+            'Referer': 'https://www.xpxs.net/',
+            'Origin': 'https://www.xpxs.net',
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+          }
         }
       }
     },
@@ -90,6 +101,45 @@ export default defineConfig(({ mode }) => {
           server.middlewares.use((req, res, next) => {
             const url = req.url ? new URL(req.url, `http://${req.headers.host}`) : null;
             if (!url) return next();
+            
+            // 0. 调试测试 API
+            if (url.pathname === '/api/debug-search') {
+              const keyword = url.searchParams.get('keyword') || '斗罗大陆';
+              
+              res.setHeader('Content-Type', 'application/json; charset=utf-8');
+              res.setHeader('Access-Control-Allow-Origin', '*');
+              
+              console.log(`[Debug API] Searching for: ${keyword}`);
+              
+              // 这里我们直接返回测试数据，因为要在前端直接调用
+              res.end(JSON.stringify({
+                success: true,
+                keyword,
+                message: '请在主应用中测试搜索功能'
+              }));
+              return;
+            }
+
+            // 0.1 书源测试 API
+            if (url.pathname === '/api/test-source') {
+              const source = url.searchParams.get('source');
+              const keyword = url.searchParams.get('keyword') || '斗罗大陆';
+              
+              res.setHeader('Content-Type', 'application/json; charset=utf-8');
+              res.setHeader('Access-Control-Allow-Origin', '*');
+              
+              console.log(`[Test Source API] Testing ${source} with keyword: ${keyword}喵~`);
+              
+              // 返回指令让前端调用实际的搜索功能
+              res.end(JSON.stringify({
+                success: true,
+                message: `请使用前端的 ${source} 书源进行搜索测试`,
+                instruction: `调用 searchNovel("${keyword}", "${source}")`,
+                source,
+                keyword
+              }));
+              return;
+            }
 
             // 1. Save EPUB API
             if (url.pathname === '/api/save-epub') {
@@ -811,7 +861,13 @@ export default defineConfig(({ mode }) => {
                 } else if (site === 'wanbenge') {
                   targetUrl = `https://www.jizai22.com/${path}${search}`;
                 } else if (site === 'shukuge') {
-                  targetUrl = `https://www.shukuge.com/${path}${search}`;
+                  targetUrl = `http://www.shukuge.com/${path}${search}`;
+                } else if (site === 'alicesw') {
+                  targetUrl = `https://www.alicesw.com/${path}${search}`;
+                } else if (site === 'xpxs') {
+                  targetUrl = `https://www.xpxs.net/${path}${search}`;
+                } else if (site === 'yeduji') {
+                  targetUrl = `https://www.yeduji.com/${path}${search}`;
                 }
               }
 
@@ -862,8 +918,19 @@ export default defineConfig(({ mode }) => {
 
                   // FORCE correct headers for target
                   const isMobileTarget = targetUrl.includes('jizai22.com') || targetUrl.includes('wanbenge');
+                  const isAliceswTarget = targetUrl.includes('alicesw.com');
                   if (isMobileTarget) {
                       headersToForward['user-agent'] = 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1';
+                  } else if (isAliceswTarget) {
+                      // 爱丽丝书屋需要更真实的浏览器请求头喵~
+                      headersToForward['user-agent'] = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 Edg/120.0.0.0';
+                      headersToForward['sec-ch-ua'] = '"Not_A Brand";v="8", "Chromium";v="120", "Microsoft Edge";v="120"';
+                      headersToForward['sec-ch-ua-mobile'] = '?0';
+                      headersToForward['sec-ch-ua-platform'] = '"Windows"';
+                      headersToForward['sec-fetch-dest'] = 'document';
+                      headersToForward['sec-fetch-mode'] = 'navigate';
+                      headersToForward['sec-fetch-site'] = 'none';
+                      headersToForward['sec-fetch-user'] = '?1';
                   } else {
                       headersToForward['user-agent'] = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
                   }
@@ -1204,6 +1271,69 @@ export default defineConfig(({ mode }) => {
           } catch (e) {
             console.log('[Browser Search] bqgui wait timeout');
           }
+        } else if (site === 'alicesw') {
+          // alicesw.com search logic - 使用浏览器渲染喵~
+          console.log('[Browser Search] 开始爱丽丝书屋浏览器搜索喵~');
+          
+          // 尝试直接访问搜索页面喵
+          const searchPageUrl = `https://www.alicesw.com/search?q=${encodeURIComponent(keyword)}&f=_all&sort=relevance&p=1&serialize=`;
+          await page.goto(searchPageUrl, { waitUntil: 'networkidle2', timeout: 30000 });
+          
+          // 等待内容加载喵
+          await new Promise(resolve => setTimeout(resolve, 2000));
+          
+          // 尝试等待搜索结果出现喵
+          try {
+            await page.waitForSelector('h4, .novel-item, article', { timeout: 10000 });
+          } catch (e) {
+            console.log('[Browser Search] alicesw wait timeout, continuing anyway喵~');
+          }
+          
+          // 分页搜索：最多取3页喵（注意：网站使用 &p= 而不是 &page=）
+          for (let pageNum = 2; pageNum <= 3; pageNum++) {
+            try {
+              const nextPageUrl = `https://www.alicesw.com/search?q=${encodeURIComponent(keyword)}&f=_all&sort=relevance&p=${pageNum}&serialize=`;
+              await page.goto(nextPageUrl, { waitUntil: 'networkidle2', timeout: 20000 });
+              await new Promise(resolve => setTimeout(resolve, 2000));
+              console.log(`[Browser Search] alicesw 获取第 ${pageNum} 页喵~`);
+            } catch (e) {
+              console.log(`[Browser Search] alicesw 第 ${pageNum} 页加载失败，停止分页喵~`);
+              break;
+            }
+          }
+        } else if (site === 'xpxs') {
+          // xpxs.net search logic - 虾皮小说喵~
+          console.log('[Browser Search] 开始虾皮小说浏览器搜索喵~');
+          const searchPageUrl = `https://www.xpxs.net/search/?searchkey=${encodeURIComponent(keyword)}`;
+          await page.goto(searchPageUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
+          await new Promise(resolve => setTimeout(resolve, 2000));
+          try {
+            await page.waitForSelector('dl, .item, .bookbox', { timeout: 10000 });
+          } catch (e) {
+            console.log('[Browser Search] xpxs wait timeout, continuing anyway喵~');
+          }
+        } else if (site === 'yeduji') {
+          // yeduji.com search logic - 夜读集喵~
+          console.log('[Browser Search] 开始夜读集浏览器搜索喵~');
+          const searchPageUrl = `https://www.yeduji.com/search?keyword=${encodeURIComponent(keyword)}`;
+          await page.goto(searchPageUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
+          await new Promise(resolve => setTimeout(resolve, 2000));
+          try {
+            await page.waitForSelector('.novel-item, .item, .book', { timeout: 10000 });
+          } catch (e) {
+            console.log('[Browser Search] yeduji wait timeout, continuing anyway喵~');
+          }
+        } else if (site === 'shukuge') {
+          // shukuge.com search logic - 书库阁喵~
+          console.log('[Browser Search] 开始书库阁浏览器搜索喵~');
+          const searchPageUrl = `http://www.shukuge.com/Search?wd=${encodeURIComponent(keyword)}`;
+          await page.goto(searchPageUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
+          await new Promise(resolve => setTimeout(resolve, 2000));
+          try {
+            await page.waitForSelector('.listitem, .item, .bookbox', { timeout: 10000 });
+          } catch (e) {
+            console.log('[Browser Search] shukuge wait timeout, continuing anyway喵~');
+          }
         } else {
                     // Generic fallback for other sites
                     const searchPageUrl = searchUrl;
@@ -1217,7 +1347,7 @@ export default defineConfig(({ mode }) => {
                   let allResults: any[] = [];
                   let finalUrl = page.url();
 
-                  const scrapePage = async () => {
+                  const scrapePage = async (site, keywordParam) => {
                     const pageData = await page.evaluate((currentSite, kw) => {
                       const novels: any[] = [];
                       const nextPages: string[] = [];
@@ -1449,6 +1579,115 @@ export default defineConfig(({ mode }) => {
                          });
                        }
 
+                      // 爱丽丝书屋数据提取喵~
+                      if (currentSite === 'alicesw') {
+                        console.log('[Scrape] 开始提取爱丽丝书屋数据喵~');
+                        
+                        // 清理书名中的编号前缀
+                        const cleanTitle = (title: string) => {
+                          return title
+                            .replace(/^\d+[\.\、\s《]+/, '')
+                            .replace(/^\d+[\.\、\s]+/, '')
+                            .trim();
+                        };
+                        
+                        // 爱丽丝书屋搜索结果结构：每个结果在 ##### 中
+                        // h4 是标题，下面是作者、字数等信息
+                        const sections = document.querySelectorAll('h4, h3, h5');
+                        console.log(`[Scrape] 爱丽丝书屋找到 ${sections.length} 个标题元素喵~`);
+                        
+                        sections.forEach(section => {
+                          const titleLink = section.querySelector('a');
+                          if (!titleLink) return;
+                          
+                          const href = titleLink.getAttribute('href') || '';
+                          if (!href.includes('/book/') && !href.includes('/novel/')) return;
+                          
+                          const rawTitle = titleLink.textContent?.trim() || '';
+                          const title = cleanTitle(rawTitle);
+                          if (!title || title.length < 2) return;
+                          
+                          // 构建完整链接
+                          let detailUrl = href;
+                          if (!detailUrl.startsWith('http')) {
+                            detailUrl = detailUrl.startsWith('/') 
+                              ? 'https://www.alicesw.com' + detailUrl 
+                              : 'https://www.alicesw.com/' + detailUrl;
+                          }
+                          
+                          if (novels.some(n => n.detailUrl === detailUrl)) return;
+                          
+                          // 尝试从父级或兄弟元素中提取作者信息
+                          let author = '未知';
+                          let description = '';
+                          let coverUrl = '';
+                          
+                          // 查找包含作者信息的父容器
+                          const parent = section.closest('li, .item, article, div');
+                          if (parent) {
+                            const text = parent.textContent || '';
+                            // 匹配 "作者：xxx" 模式
+                            const authorMatch = text.match(/作者[：:]\s*([^\n\s]+)/);
+                            if (authorMatch && authorMatch[1]) {
+                              author = authorMatch[1].trim();
+                            }
+                            
+                            // 尝试提取简介（第一小段文字）
+                            const descMatch = text.match(/作者[：:].*?(?=标签|$)/);
+                            if (descMatch) {
+                              const descText = text.substring(descMatch.index! + descMatch[0].length, descMatch.index! + descMatch[0].length + 100);
+                              description = descText.trim().substring(0, 100);
+                            }
+                          }
+                          
+                          if (isRelevant(title, author)) {
+                            novels.push({
+                              title,
+                              detailUrl,
+                              author,
+                              coverUrl,
+                              description,
+                              sourceName: '爱丽丝书屋'
+                            });
+                          }
+                        });
+                        
+                        // 如果从标题元素提取失败，回退到链接遍历
+                        if (novels.length === 0) {
+                          const allLinks = document.querySelectorAll('a[href*="/book/"], a[href*="/novel/"]');
+                          console.log(`[Scrape] 回退：爱丽丝书屋找到 ${allLinks.length} 个书籍链接喵~`);
+                          
+                          allLinks.forEach(link => {
+                            const href = link.getAttribute('href') || '';
+                            let detailUrl = href;
+                            if (!detailUrl.startsWith('http')) {
+                              detailUrl = detailUrl.startsWith('/') 
+                                ? 'https://www.alicesw.com' + detailUrl 
+                                : 'https://www.alicesw.com/' + detailUrl;
+                            }
+                            
+                            if (novels.some(n => n.detailUrl === detailUrl)) return;
+                            
+                            const rawTitle = link.textContent?.trim() || '';
+                            const title = cleanTitle(rawTitle);
+                            if (!title || title.length < 2) return;
+                            
+                            if (isRelevant(title, '')) {
+                              novels.push({
+                                title,
+                                detailUrl,
+                                author: '未知',
+                                coverUrl: '',
+                                description: '',
+                                sourceName: '爱丽丝书屋'
+                              });
+                            }
+                          });
+                        }
+                        
+                        console.log(`[Scrape] 爱丽丝书屋总计提取 ${novels.length} 个结果喵~`);
+                      }
+
                       // Generic fallback...
                       if (novels.length === 0) {
                         const items = document.querySelectorAll('.item, .list li, tr');
@@ -1466,7 +1705,7 @@ export default defineConfig(({ mode }) => {
                     return pageData;
                   };
 
-                  const initialData = await scrapePage();
+                  const initialData = await scrapePage(site, keyword);
                   allResults = initialData.novels;
 
                   await browser.close();
@@ -1530,6 +1769,52 @@ export default defineConfig(({ mode }) => {
                     }
                   });
 
+                  // 爱丽丝书屋章节内容需要等待异步加载喵~
+                  if (targetUrl.includes('alicesw.com')) {
+                    console.log('[Browser Details] 检测到爱丽丝书屋，添加特殊等待逻辑喵~');
+                    
+                    // 方法1：等待 .read-content 中不再包含"加载中"
+                    await page.waitForFunction(() => {
+                      const content = document.querySelector('.read-content, .text-content');
+                      if (content) {
+                        const text = content.textContent || '';
+                        // 检查内容是否已加载（不再是加载中状态）
+                        return !text.includes('加载中') && !text.includes('章节加载中') && text.length > 50;
+                      }
+                      return false;
+                    }, { timeout: 15000 }).catch(() => {
+                      console.log('[Browser Details] 爱丽丝书屋内容等待超时，尝试备用方案喵~');
+                    });
+                    
+                    // 方法2：如果方法1失败，检查 data-nurl 并尝试获取真实内容
+                    await new Promise(resolve => setTimeout(resolve, 2000)); // 额外等待2秒让 JavaScript 执行
+                    
+                    // 检查是否有新的内容加载进来
+                    const hasRealContent = await page.evaluate(() => {
+                      const content = document.querySelector('.read-content, .text-content');
+                      return content && (content.textContent || '').length > 100;
+                    });
+                    
+                    if (!hasRealContent) {
+                      console.log('[Browser Details] 检测到内容可能仍需异步加载，尝试获取 data-nurl 喵~');
+                      // 尝试查找并访问真实内容URL
+                      const realUrl = await page.evaluate(() => {
+                        const box = document.querySelector('#j_chapterBox .text-wrap');
+                        const nurl = box?.getAttribute('data-nurl');
+                        if (nurl && !nurl.includes('javascript')) {
+                          return nurl.startsWith('http') ? nurl : new URL(nurl, window.location.href).href;
+                        }
+                        return null;
+                      });
+                      
+                      if (realUrl) {
+                        console.log(`[Browser Details] 找到真实内容URL: ${realUrl}喵~`);
+                        await page.goto(realUrl, { waitUntil: 'networkidle2', timeout: 15000 });
+                        await new Promise(resolve => setTimeout(resolve, 1000));
+                      }
+                    }
+                  }
+                  
                   // 如果是顶点小说网，尝试等待特定的列表元素喵
                   if (targetUrl.includes('23ddw.net')) {
                     await page.waitForSelector('#list, .chapter-list, .section-list, #nr', { timeout: 5000 }).catch(() => {});
