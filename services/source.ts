@@ -284,24 +284,27 @@ interface SourceProvider {
 }
 
 const PROXY_LIST = [
-  // 1. 优先使用 Vercel API 代理 (Production / Vercel Environment)
-  (url: string) => `/api/proxy?url=${encodeURIComponent(url)}`,
-  // 2. 本地 Vite 代理 (Dev Environment - defined in vite.config.ts)
+  // 1. 直接请求 (Direct fetch - 某些网站可能允许喵~)
+  (url: string) => url,
+  // 2. 本地 Vite 代理 (CORS 问题时使用)
   (url: string) => {
     if (typeof window !== 'undefined' && window.location.hostname === 'localhost') {
         if (url.includes('www.jizai22.com')) return url.replace('https://www.jizai22.com', '/proxy/wanbenge');
         if (url.includes('www.yeduji.com')) return url.replace('https://www.yeduji.com', '/proxy/yeduji');
         if (url.includes('www.shukuge.com')) return url.replace('http://www.shukuge.com', '/proxy/shukuge');
         if (url.includes('www.23ddw.net')) return url.replace('https://www.23ddw.net', '/proxy/dingdian');
+        if (url.includes('www.alicesw.com')) return url.replace('https://www.alicesw.com', '/proxy/alicesw');
+        if (url.includes('www.xpxs.net')) return url.replace('https://www.xpxs.net', '/proxy/xpxs');
     }
-    return url; // Skip if not localhost
+    return url;
   },
-  // 3. 外部公共代理兜底喵~
+  // 3. 公共代理 (api.codetabs.com - 最可靠的公共代理喵~)
   (url: string) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`,
+  // 4. 备用公共代理
   (url: string) => `https://corsproxy.io/?${encodeURIComponent(url)}`,
   (url: string) => `https://thingproxy.freeboard.io/fetch/${url}`,
-  // 4. 最后才尝试直接请求喵~（通常会被 CORS 拦截，除非有插件喵）
-  (url: string) => url,
+  // 5. Vercel API 代理 (最后兜底)
+  (url: string) => `/api/proxy?url=${encodeURIComponent(url)}`,
 ];
 
 // Helper to fetch text with proxy rotation
@@ -436,14 +439,7 @@ const isUrl = (str: string) => {
 
 const proxifyImage = (url: string) => {
   if (!url) return '';
-  try {
-    if (typeof window !== 'undefined') {
-      const isLocalDev = window.location.hostname === 'localhost' && window.location.protocol === 'http:';
-      if (isLocalDev) return url;
-    }
-  } catch {
-  }
-
+  
   if (url.startsWith('/api/proxy?url=')) return url;
   if (url.startsWith('//')) return `/api/proxy?url=${encodeURIComponent(`https:${url}`)}`;
   if (url.startsWith('http://') || url.startsWith('https://')) {
@@ -464,6 +460,33 @@ const isPlaceholderCoverUrl = (url: string) => {
   return lower.includes('nocover') || lower.includes('no-cover') || lower.includes('nopic') ||
     lower.includes('noimage') || lower.includes('default') || lower.includes('placeholder') ||
     decoded.includes('暂无封面');
+};
+
+const COVER_CACHE_KEY = 'inkstream_alicesw_cover_cache';
+const COVER_CACHE_EXPIRY = 7 * 24 * 60 * 60 * 1000; // 7天过期喵~
+
+const getCoverCache = (): Record<string, string> => {
+  try {
+    const cached = localStorage.getItem(COVER_CACHE_KEY);
+    if (cached) {
+      const { data, timestamp } = JSON.parse(cached);
+      if (Date.now() - timestamp < COVER_CACHE_EXPIRY) {
+        return data;
+      }
+    }
+  } catch {}
+  return {};
+};
+
+const saveCoverCache = (title: string, coverUrl: string) => {
+  try {
+    const cache = getCoverCache();
+    cache[title] = coverUrl;
+    localStorage.setItem(COVER_CACHE_KEY, JSON.stringify({
+      data: cache,
+      timestamp: Date.now()
+    }));
+  } catch {}
 };
 
 const wanbengeProvider: SourceProvider = {
@@ -612,23 +635,40 @@ const wanbengeProvider: SourceProvider = {
       return results;
     };
 
-    // Try GET search
+    // 使用公共代理搜索 (api.codetabs.com - 可靠喵~)
+    const publicProxy = (url: string) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`;
+    
+    // Try GET search with public proxy (服务器代理对完本阁无效)
     try {
-      const getUrl = `/api/gbk-search?target=${encodeURIComponent(`${WANBENGE_URL}/modules/article/search.php?searchkey={keyword}`)}&keyword=${encodeURIComponent(keyword)}&method=GET`;
-      const getHtml = await fetchText(getUrl, undefined, 'gb18030');
+      const getUrl = `${WANBENGE_URL}/modules/article/search.php?searchkey=${encodeURIComponent(keyword)}`;
+      const proxyUrl = publicProxy(getUrl);
+      console.log(`[Wanbenge] Using public proxy: ${proxyUrl}`);
+      const getHtml = await fetchText(proxyUrl, undefined, 'gb18030');
       novels = parseWanbengeHTML(getHtml, keyword);
     } catch (e) {
-      console.warn("[Wanbenge] GET search failed", e);
+      console.warn("[Wanbenge] Public proxy search failed", e);
     }
 
     // Try POST search if GET failed
     if (novels.length === 0) {
       try {
         const postTarget = `${WANBENGE_URL}/modules/article/search.php`;
-        const postData = `searchkey={keyword}&action=login&submit=%CB%D1++%CB%F7`;
-        const postUrl = `/api/gbk-search?target=${encodeURIComponent(postTarget)}&keyword=${encodeURIComponent(keyword)}&method=POST&data=${encodeURIComponent(postData)}`;
-        const postHtml = await fetchText(postUrl, undefined, 'gb18030');
-        novels = parseWanbengeHTML(postHtml, keyword);
+        const postData = `searchkey=${encodeURIComponent(keyword)}`;
+        // 使用公共代理发送POST请求
+        const postProxyUrl = publicProxy(postTarget);
+        const response = await fetch(postProxyUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+          },
+          body: postData
+        });
+        if (response.ok) {
+          const buffer = await response.arrayBuffer();
+          const decoder = new TextDecoder('gb18030');
+          const postHtml = decoder.decode(buffer);
+          novels = parseWanbengeHTML(postHtml, keyword);
+        }
       } catch (e) {
         console.warn("[Wanbenge] POST search failed", e);
       }
@@ -984,65 +1024,104 @@ const yedujiProvider: SourceProvider = {
   baseUrl: YEDUJI_URL,
   search: async (keyword: string): Promise<Novel[]> => {
     console.log(`[Yeduji] Searching for: ${keyword}喵~`);
-    const searchUrl = `${YEDUJI_URL}/search/?q=${encodeURIComponent(keyword)}`;
-    const html = await fetchText(searchUrl);
-    console.log(`[Yeduji] HTML length: ${html.length}喵~`);
-    if (html.length < 500) {
-      console.log(`[Yeduji] HTML sample: ${html}喵~`);
-    }
-    const doc = parseHTML(html);
-    const results: Novel[] = [];
+    let results: Novel[] = [];
     
-    // 搜索结果在 .novel-item 容器中
-    const items = doc.querySelectorAll('.novel-item');
+    // 使用公共代理搜索喵~
+    const publicProxy = (url: string) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`;
     
-    items.forEach(item => {
-      const titleEl = item.querySelector('.title') || item.querySelector('a[href*="/book/"]');
-      const title = titleEl?.textContent?.trim() || "";
-      const href = titleEl?.getAttribute('href');
-      
-      if (!title || !href) return;
-      
-      const detailUrl = href.startsWith('http') ? href : `${YEDUJI_URL}${href}`;
-      const author = item.querySelector('.author')?.textContent?.trim() || "未知";
-      const description = item.querySelector('.desc')?.textContent?.trim() || "";
-      const coverImg = item.querySelector('.cover img');
-      let coverUrl = coverImg?.getAttribute('data-src') || coverImg?.getAttribute('src') || "";
-      
-      if (coverUrl && !coverUrl.startsWith('http')) {
-        coverUrl = `${YEDUJI_URL}${coverUrl}`;
+    // 夜读集搜索 URL 格式：/search?keyword=关键词
+    const searchUrl = `${YEDUJI_URL}/search?keyword=${encodeURIComponent(keyword)}`;
+    const proxyUrl = publicProxy(searchUrl);
+    console.log(`[Yeduji] Search URL: ${proxyUrl}喵~`);
+    
+    // 夜读集使用 GBK 编码，需要特殊处理
+    try {
+      const html = await fetchText(proxyUrl, undefined, 'gbk');
+      console.log(`[Yeduji] HTML length: ${html.length}喵~`);
+      if (html.length < 500) {
+        console.log(`[Yeduji] HTML sample: ${html.substring(0, 200)}喵~`);
       }
+      const doc = parseHTML(html);
       
-      // 统一使用代理处理封面 喵~
-      coverUrl = proxifyImage(coverUrl);
+      // 搜索结果在 .novel-item 容器中
+      const items = doc.querySelectorAll('.novel-item');
+      
+      items.forEach(item => {
+        const titleEl = item.querySelector('.title') || item.querySelector('a[href*="/book/"]');
+        const title = titleEl?.textContent?.trim() || "";
+        const href = titleEl?.getAttribute('href');
+        
+        if (!title || !href) return;
+        
+        const detailUrl = href.startsWith('http') ? href : `${YEDUJI_URL}${href}`;
+        const author = item.querySelector('.author')?.textContent?.trim() || "未知";
+        const description = item.querySelector('.desc')?.textContent?.trim() || "";
+        const coverImg = item.querySelector('.cover img');
+        let coverUrl = coverImg?.getAttribute('data-src') || coverImg?.getAttribute('src') || "";
+        
+        if (coverUrl && !coverUrl.startsWith('http')) {
+          coverUrl = `${YEDUJI_URL}${coverUrl}`;
+        }
+        
+        // 统一使用代理处理封面 喵~
+        coverUrl = proxifyImage(coverUrl);
 
-      // 尝试从列表项提取标签喵~
-      const tags: string[] = [];
-      const tagDt = Array.from(item.querySelectorAll('dl dt')).find(dt => dt.textContent?.includes('标签'));
-      if (tagDt) {
-          const dd = tagDt.nextElementSibling;
-          if (dd) {
-              dd.querySelectorAll('a').forEach(a => {
-                  if (a.textContent) tags.push(a.textContent.trim());
-              });
-          }
-      }
+        // 尝试从列表项提取标签喵~
+        const tags: string[] = [];
+        const tagDt = Array.from(item.querySelectorAll('dl dt')).find(dt => dt.textContent?.includes('标签'));
+        if (tagDt) {
+            const dd = tagDt.nextElementSibling;
+            if (dd) {
+                dd.querySelectorAll('a').forEach(a => {
+                    if (a.textContent) tags.push(a.textContent.trim());
+                });
+            }
+        }
 
-      results.push({
-        id: detailUrl,
-        title: title,
-        author: author,
-        description: description,
-        coverUrl: coverUrl,
-        tags: tags,
-        status: 'Unknown',
-        detailUrl: detailUrl,
-        chapters: [],
-        sourceName: '夜读集'
+        results.push({
+          id: detailUrl,
+          title: title,
+          author: author,
+          description: description,
+          coverUrl: coverUrl,
+          tags: tags,
+          status: 'Unknown',
+          detailUrl: detailUrl,
+          chapters: [],
+          sourceName: '夜读集'
+        });
       });
-    });
 
-    console.log(`[Yeduji] Found ${results.length} items on page喵~`);
+      console.log(`[Yeduji] Found ${results.length} items on page喵~`);
+    } catch (e) {
+      console.warn(`[Yeduji] Direct fetch failed: ${e}喵~`);
+    }
+
+    // Fallback to browser search
+    if (results.length === 0) {
+      try {
+        const browserSearchUrl = `/api/browser-search?site=yeduji&keyword=${encodeURIComponent(keyword)}`;
+        const response = await fetch(browserSearchUrl);
+        const data = await response.json();
+        if (data.success && data.results) {
+          results = data.results.map((item: any) => ({
+            id: item.detailUrl,
+            title: item.title,
+            author: item.author || '未知',
+            coverUrl: item.coverUrl || '',
+            description: item.description || '',
+            tags: [],
+            status: 'Unknown',
+            chapters: [],
+            sourceName: '夜读集',
+            detailUrl: item.detailUrl
+          }));
+        }
+      } catch (e) {
+        console.warn("Yeduji browser search fallback failed", e);
+      }
+    }
+
     return results;
   },
   getDetails: async (novel: Novel): Promise<Novel> => {
@@ -1157,7 +1236,6 @@ const yedujiProvider: SourceProvider = {
 
     console.log(`[Yeduji] Total chapters found: ${chapters.length}喵~`);
     if (chapters.length === 0) throw new Error("未找到章节列表喵~");
-
     return { ...novel, chapters };
   },
   getChapterContent: async (chapter: Chapter): Promise<string> => {
@@ -1228,95 +1306,126 @@ const shukugeProvider: SourceProvider = {
   baseUrl: SHUKUGE_URL,
   search: async (keyword: string): Promise<Novel[]> => {
     console.log(`[Shukuge] Searching for: ${keyword}喵~`);
+    let results: Novel[] = [];
+    
     const searchUrl = `${SHUKUGE_URL}/Search?wd=${encodeURIComponent(keyword)}`;
-    const html = await fetchText(searchUrl);
-    const doc = parseHTML(html);
-    const results: Novel[] = [];
     
-    // 搜索结果通常在 .listitem 标签中
-    const items = doc.querySelectorAll('.listitem');
-    
-    items.forEach(item => {
-      const titleEl = item.querySelector('h2 a') as HTMLAnchorElement;
-      if (!titleEl) return;
+    try {
+      const html = await fetchText(searchUrl);
+      const doc = parseHTML(html);
       
-      const title = cleanShukugeTitle(titleEl.textContent?.trim() || "");
-      const href = titleEl.getAttribute('href') || "";
-      const authorMatch = item.querySelector('.bookdesc')?.textContent?.match(/作者：(.*?)(?=\s|分类|$)/);
-      const author = authorMatch ? authorMatch[1].trim() : "未知";
+      // 搜索结果通常在 .listitem 标签中
+      const items = doc.querySelectorAll('.listitem');
       
-      const imgEl = item.querySelector('img');
-      let coverUrl = imgEl?.getAttribute('src') || "";
-      if (coverUrl && !coverUrl.startsWith('http')) {
-        coverUrl = `${SHUKUGE_URL}${coverUrl}`;
-      }
-      
-      // 解决 HTTPS 下无法加载 HTTP 图片的问题 喵~
-      coverUrl = proxifyImage(coverUrl);
-      
-      // 优化简介提取逻辑
-      let description = "";
-      const descNodes = item.querySelectorAll('.bookdesc .desc');
-      let descEl: Element | null = null;
-      if (descNodes.length > 0) {
-        descEl = descNodes[descNodes.length - 1];
-      } else {
-        descEl = item.querySelector('.bookdesc') || item.querySelector('.desc');
-      }
+      items.forEach(item => {
+        const titleEl = item.querySelector('h2 a') as HTMLAnchorElement;
+        if (!titleEl) return;
+        
+        const title = cleanShukugeTitle(titleEl.textContent?.trim() || "");
+        const href = titleEl.getAttribute('href') || "";
+        const authorMatch = item.querySelector('.bookdesc')?.textContent?.match(/作者：(.*?)(?=\s|分类|$)/);
+        const author = authorMatch ? authorMatch[1].trim() : "未知";
+        
+        const imgEl = item.querySelector('img');
+        let coverUrl = imgEl?.getAttribute('src') || "";
+        if (coverUrl && !coverUrl.startsWith('http')) {
+          coverUrl = `${SHUKUGE_URL}${coverUrl}`;
+        }
+        
+        // 解决 HTTPS 下无法加载 HTTP 图片的问题 喵~
+        coverUrl = proxifyImage(coverUrl);
+        
+        // 优化简介提取逻辑
+        let description = "";
+        const descNodes = item.querySelectorAll('.bookdesc .desc');
+        let descEl: Element | null = null;
+        if (descNodes.length > 0) {
+          descEl = descNodes[descNodes.length - 1];
+        } else {
+          descEl = item.querySelector('.bookdesc') || item.querySelector('.desc');
+        }
 
-      if (descEl) {
-        const text = (descEl.textContent || "").trim();
-        if (text && !text.includes('热搜小说：')) {
-          if (text.includes('简介：')) {
-            description = text.split('简介：')[1].trim();
-          } else if (text.includes('简介:')) {
-            description = text.split('简介:')[1].trim();
-          } else {
-            description = text.replace(/作者：.*分类：.*/, '').trim();
+        if (descEl) {
+          const text = (descEl.textContent || "").trim();
+          if (text && !text.includes('热搜小说：')) {
+            if (text.includes('简介：')) {
+              description = text.split('简介：')[1].trim();
+            } else if (text.includes('简介:')) {
+              description = text.split('简介:')[1].trim();
+            } else {
+              description = text.replace(/作者：.*分类：.*/, '').trim();
+            }
           }
         }
-      }
-      
-      if (isRelevant(title, author, keyword)) {
-        results.push({
-          id: href,
-          title,
-          author,
-          coverUrl,
-          description,
-          tags: [],
-          status: 'Unknown',
-          detailUrl: href.startsWith('http') ? href : `${SHUKUGE_URL}${href}`,
-          chapters: [],
-          sourceName: '书库阁'
-        });
-      }
-    });
-    
-    // 如果常规解析没结果，尝试从链接里直接找
-    if (results.length === 0) {
-      const links = doc.querySelectorAll('a[href*="/book/"]');
-      links.forEach(link => {
-        const title = cleanShukugeTitle(link.textContent?.trim() || "");
-        if (title && isRelevant(title, "未知", keyword)) {
-          const href = link.getAttribute('href') || "";
-          const detailUrl = href.startsWith('http') ? href : `${SHUKUGE_URL}${href}`;
-          if (!results.some(r => r.detailUrl === detailUrl)) {
-            results.push({
-              id: href,
-              title,
-              author: "未知",
-              coverUrl: "",
-              description: "",
-              tags: [],
-              status: 'Unknown',
-              detailUrl,
-              chapters: [],
-              sourceName: '书库阁'
-            });
-          }
+        
+        if (isRelevant(title, author, keyword)) {
+          results.push({
+            id: href,
+            title,
+            author,
+            coverUrl,
+            description,
+            tags: [],
+            status: 'Unknown',
+            detailUrl: href.startsWith('http') ? href : `${SHUKUGE_URL}${href}`,
+            chapters: [],
+            sourceName: '书库阁'
+          });
         }
       });
+      
+      // 如果常规解析没结果，尝试从链接里直接找
+      if (results.length === 0) {
+        const links = doc.querySelectorAll('a[href*="/book/"]');
+        links.forEach(link => {
+          const title = cleanShukugeTitle(link.textContent?.trim() || "");
+          if (title && isRelevant(title, "未知", keyword)) {
+            const href = link.getAttribute('href') || "";
+            const detailUrl = href.startsWith('http') ? href : `${SHUKUGE_URL}${href}`;
+            if (!results.some(r => r.detailUrl === detailUrl)) {
+              results.push({
+                id: href,
+                title,
+                author: "未知",
+                coverUrl: "",
+                description: "",
+                tags: [],
+                status: 'Unknown',
+                detailUrl,
+                chapters: [],
+                sourceName: '书库阁'
+              });
+            }
+          }
+        });
+      }
+    } catch (e) {
+      console.warn(`[Shukuge] Direct fetch failed: ${e}喵~`);
+    }
+
+    // Fallback to browser search
+    if (results.length === 0) {
+      try {
+        const browserSearchUrl = `/api/browser-search?site=shukuge&keyword=${encodeURIComponent(keyword)}`;
+        const response = await fetch(browserSearchUrl);
+        const data = await response.json();
+        if (data.success && data.results) {
+          results = data.results.map((item: any) => ({
+            id: item.detailUrl,
+            title: item.title,
+            author: item.author || '未知',
+            coverUrl: item.coverUrl || '',
+            description: item.description || '',
+            tags: [],
+            status: 'Unknown',
+            chapters: [],
+            sourceName: '书库阁',
+            detailUrl: item.detailUrl
+          }));
+        }
+      } catch (e) {
+        console.warn("Shukuge browser search fallback failed", e);
+      }
     }
     
     return results;
@@ -1412,6 +1521,27 @@ const shukugeProvider: SourceProvider = {
     });
     
     if (chapters.length === 0) throw new Error("未找到章节列表喵~");
+    
+    // 调整章节顺序：检查是否是倒序（最后一章是第1章）
+    // 如果标题包含"第"且后面的数字越来越小，就反转数组
+    const firstTitle = chapters[0]?.title || '';
+    const lastTitle = chapters[chapters.length - 1]?.title || '';
+    
+    const getChapterNumber = (title: string): number => {
+      const match = title.match(/第(\d+)/);
+      return match ? parseInt(match[1]) : 0;
+    };
+    
+    const firstNum = getChapterNumber(firstTitle);
+    const lastNum = getChapterNumber(lastTitle);
+    
+    if (firstNum > lastNum && firstNum > 0 && lastNum > 0) {
+      chapters.reverse();
+      // 重新编号
+      chapters.forEach((chapter, index) => {
+        chapter.number = index + 1;
+      });
+    }
     
     return { ...novel, chapters };
   },
@@ -2036,6 +2166,27 @@ const bqguiProvider: SourceProvider = {
 
     if (chapters.length === 0) throw new Error("未找到章节列表喵~");
     
+    // 调整章节顺序：检查是否是倒序（最后一章是第1章）
+    // 如果标题包含"第"且后面的数字越来越小，就反转数组
+    const firstTitle = chapters[0]?.title || '';
+    const lastTitle = chapters[chapters.length - 1]?.title || '';
+    
+    const getChapterNumber = (title: string): number => {
+      const match = title.match(/第(\d+)/);
+      return match ? parseInt(match[1]) : 0;
+    };
+    
+    const firstNum = getChapterNumber(firstTitle);
+    const lastNum = getChapterNumber(lastTitle);
+    
+    if (firstNum > lastNum && firstNum > 0 && lastNum > 0) {
+      chapters.reverse();
+      // 重新编号
+      chapters.forEach((chapter, index) => {
+        chapter.number = index + 1;
+      });
+    }
+    
     return { ...novel, chapters };
   },
   getChapterContent: async (chapter: Chapter): Promise<string> => {
@@ -2116,74 +2267,105 @@ const xpxsProvider: SourceProvider = {
   baseUrl: XPXS_URL,
   search: async (keyword: string): Promise<Novel[]> => {
     console.log(`[Xpxs] Searching for: ${keyword}喵~`);
-    const searchUrl = `${XPXS_URL}/search/?searchkey=${encodeURIComponent(keyword)}`;
-    const html = await fetchText(searchUrl);
-    const doc = parseHTML(html);
-    const results: Novel[] = [];
+    let results: Novel[] = [];
     
-    // 虾皮小说的搜索结果通常在 dl 列表中
-    const dls = doc.querySelectorAll('dl');
-    console.log(`[Xpxs] Found ${dls.length} dl elements喵~`);
+    const searchUrl = `${XPXS_URL}/search/?searchkey=${encodeURIComponent(keyword)}`;
+    
+    try {
+      const html = await fetchText(searchUrl);
+      const doc = parseHTML(html);
+      
+      // 虾皮小说的搜索结果通常在 dl 列表中
+      const dls = doc.querySelectorAll('dl');
+      console.log(`[Xpxs] Found ${dls.length} dl elements喵~`);
 
-    dls.forEach(dl => {
-        try {
-            const titleEl = dl.querySelector('dt a');
-            if (!titleEl) return;
-            
-            const title = titleEl.textContent?.trim() || "";
-            let href = titleEl.getAttribute('href') || "";
-            if (href && !href.startsWith('http')) {
-                href = `${XPXS_URL}${href}`;
-            }
-            
-            const coverEl = dl.querySelector('img');
-            let coverUrl = coverEl?.getAttribute('data-original') || coverEl?.getAttribute('src') || "";
-            if (coverUrl && !coverUrl.startsWith('http')) {
-                coverUrl = `${XPXS_URL}${coverUrl}`;
-            }
-            if (isPlaceholderCoverUrl(coverUrl)) coverUrl = "";
-            
-            // 第二个 dd 通常是作者信息，包含链接
-            const dds = dl.querySelectorAll('dd');
-            let author = "未知";
-            let description = "";
-            
-            if (dds.length > 0) {
-                // 第一个 dd 是简介
-                description = dds[0].textContent?.trim() || "";
-            }
-            
-            if (dds.length > 1) {
-                // 第二个 dd 包含作者
-                const authorEl = dds[1].querySelector('a');
-                if (authorEl) {
-                    author = authorEl.textContent?.trim() || "未知";
-                } else {
-                    // 尝试从文本提取
-                    const text = dds[1].textContent || "";
-                    // 假设格式为 "作者：xxx" 或直接是作者名
-                    author = text.split(/\s+/)[0] || "未知";
-                }
-            }
-            
-            if (isRelevant(title, author, keyword)) {
-                results.push({
-                    id: href,
-                    title,
-                    author,
-                    coverUrl: proxifyImage(coverUrl),
-                    description,
-                    tags: [],
-                    status: 'Unknown',
-                    detailUrl: href,
-                    chapters: [],
-                    sourceName: '虾皮小说'
-                });
-            }
-        } catch (e) {
-            console.warn(`[Xpxs] Error parsing search result:`, e);
+      dls.forEach(dl => {
+          try {
+              const titleEl = dl.querySelector('dt a');
+              if (!titleEl) return;
+              
+              const title = titleEl.textContent?.trim() || "";
+              let href = titleEl.getAttribute('href') || "";
+              if (href && !href.startsWith('http')) {
+                  href = `${XPXS_URL}${href}`;
+              }
+              
+              const coverEl = dl.querySelector('img');
+              let coverUrl = coverEl?.getAttribute('data-original') || coverEl?.getAttribute('src') || "";
+              if (coverUrl && !coverUrl.startsWith('http')) {
+                  coverUrl = `${XPXS_URL}${coverUrl}`;
+              }
+              if (isPlaceholderCoverUrl(coverUrl)) coverUrl = "";
+              
+              // 第二个 dd 通常是作者信息，包含链接
+              const dds = dl.querySelectorAll('dd');
+              let author = "未知";
+              let description = "";
+              
+              if (dds.length > 0) {
+                  // 第一个 dd 是简介
+                  description = dds[0].textContent?.trim() || "";
+              }
+              
+              if (dds.length > 1) {
+                  // 第二个 dd 包含作者
+                  const authorEl = dds[1].querySelector('a');
+                  if (authorEl) {
+                      author = authorEl.textContent?.trim() || "未知";
+                  } else {
+                      // 尝试从文本提取
+                      const text = dds[1].textContent || "";
+                      // 假设格式为 "作者：xxx" 或直接是作者名
+                      author = text.split(/\s+/)[0] || "未知";
+                  }
+              }
+              
+              if (isRelevant(title, author, keyword)) {
+                  results.push({
+                      id: href,
+                      title,
+                      author,
+                      coverUrl: proxifyImage(coverUrl),
+                      description,
+                      tags: [],
+                      status: 'Unknown',
+                      detailUrl: href,
+                      chapters: [],
+                      sourceName: '虾皮小说'
+                  });
+              }
+          } catch (e) {
+              console.warn(`[Xpxs] Error parsing search result:`, e);
+          }
+      });
+    } catch (e) {
+      console.warn(`[Xpxs] Direct fetch failed: ${e}喵~`);
+    }
+    
+    // Fallback to browser search
+    if (results.length === 0) {
+      try {
+        const browserSearchUrl = `/api/browser-search?site=xpxs&keyword=${encodeURIComponent(keyword)}`;
+        const response = await fetch(browserSearchUrl);
+        const data = await response.json();
+        if (data.success && data.results) {
+          results = data.results.map((item: any) => ({
+            id: item.detailUrl,
+            title: item.title,
+            author: item.author || '未知',
+            coverUrl: item.coverUrl || '',
+            description: item.description || '',
+            tags: [],
+            status: 'Unknown',
+            chapters: [],
+            sourceName: '虾皮小说',
+            detailUrl: item.detailUrl
+          }));
         }
-    });
+      } catch (e) {
+        console.warn("Xpxs browser search fallback failed", e);
+      }
+    }
     
     return results;
   },
@@ -2503,82 +2685,87 @@ const aliceswProvider: SourceProvider = {
   baseUrl: ALICESW_URL,
   search: async (keyword: string): Promise<Novel[]> => {
     console.log(`[AliceSw] Searching for: ${keyword}喵~`);
-    try {
-      const searchUrl = `${ALICESW_URL}/search?q=${encodeURIComponent(keyword)}`;
-      const html = await fetchText(searchUrl);
-      const doc = parseHTML(html);
-      const results: Novel[] = [];
-      const seenUrls = new Set<string>();
-      
-      const items = doc.querySelectorAll('[class*="book"], [class*="item"], article, .card');
-      
-      items.forEach((item) => {
-        const titleLink = item.querySelector('a[href*="/book/"], a[href*="/novel/"], h1 a, h2 a, h3 a');
-        if (!titleLink) return;
+    const results: Novel[] = [];
+    
+    // 使用公共代理搜索喵~
+    const publicProxy = (url: string) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`;
+    
+    // 清理书名中的编号前缀
+    const cleanTitle = (title: string) => {
+      return title
+        .replace(/^\d+[\.\、\s《]+/, '')
+        .replace(/^\d+[\.\、\s]+/, '')
+        .trim();
+    };
+    
+    // 最多搜索3页
+    for (let page = 1; page <= 3; page++) {
+      try {
+        // 使用公共代理请求喵~
+        const searchUrl = `${ALICESW_URL}/search?q=${encodeURIComponent(keyword)}&f=_all&sort=relevance&p=${page}&serialize=`;
+        const proxyUrl = publicProxy(searchUrl);
+        console.log(`[AliceSw] Fetching page ${page}: ${proxyUrl}喵~`);
         
-        const title = titleLink.textContent?.trim() || '';
-        const href = titleLink.getAttribute('href');
-        if (!title || !href) return;
+        const html = await fetchText(proxyUrl);
         
-        const detailUrl = href.startsWith('http') ? href : new URL(href, ALICESW_URL).href;
-        
-        if (seenUrls.has(detailUrl) || !isRelevant(title, '', keyword)) return;
-        seenUrls.add(detailUrl);
-        
-        const authorEl = item.querySelector('[class*="author"], .writer, span:has(+span), .author-name');
-        let author = '未知';
-        if (authorEl) {
-          const authorText = authorEl.textContent?.trim() || '';
-          author = authorText.replace(/作者[：:]\s*/, '').trim();
+        if (!html || html.length < 200) {
+          console.log(`[AliceSw] Page ${page} returned empty result, stopping pagination喵~`);
+          break;
         }
         
-        const coverImg = item.querySelector('img');
-        let coverUrl = coverImg?.getAttribute('src') || coverImg?.getAttribute('data-src') || '';
-        if (coverUrl && !coverUrl.startsWith('http')) {
-          coverUrl = new URL(coverUrl, ALICESW_URL).href;
-        }
-        coverUrl = proxifyImage(coverUrl);
+        const doc = parseHTML(html);
         
-        const descEl = item.querySelector('[class*="desc"], .description, .intro, p');
-        const description = descEl?.textContent?.trim() || '';
+        // 搜索结果结构：每个结果在 <h4><a href="/novel/xxx.html">标题</a></h4>
+        const titleElements = doc.querySelectorAll('h4 a, h3 a, h5 a');
+        console.log(`[AliceSw] Page ${page} found ${titleElements.length} title elements喵~`);
         
-        results.push({
-          id: detailUrl,
-          title,
-          author,
-          coverUrl,
-          description,
-          tags: [],
-          status: 'Unknown',
-          detailUrl,
-          chapters: [],
-          sourceName: '爱丽丝书屋'
-        });
-      });
-      
-      if (results.length === 0) {
-        const allLinks = doc.querySelectorAll('a');
-        allLinks.forEach(link => {
-          const href = link.getAttribute('href');
-          if (!href) return;
+        titleElements.forEach(el => {
+          const href = el.getAttribute('href') || '';
+          if (!href.includes('/novel/') && !href.includes('/book/')) return;
           
-          const isBookUrl = href.includes('/book/') || href.includes('/novel/');
-          if (!isBookUrl) return;
-          
-          const title = link.textContent?.trim() || '';
+          const rawTitle = el.textContent?.trim() || '';
+          const title = cleanTitle(rawTitle);
           if (!title || title.length < 2) return;
           
-          const detailUrl = href.startsWith('http') ? href : new URL(href, ALICESW_URL).href;
+          let detailUrl = href.startsWith('http') ? href : `${ALICESW_URL}${href.startsWith('/') ? '' : '/'}${href}`;
           
-          if (seenUrls.has(detailUrl) || !isRelevant(title, '', keyword)) return;
-          seenUrls.add(detailUrl);
+          if (results.some(r => r.detailUrl === detailUrl)) return;
+          
+          // 从父容器提取作者和简介
+          let author = '未知';
+          let description = '';
+          let coverUrl = 'https://img.321cdn.com/img/01.png';
+          
+          // 根据HTML结构提取数据（.list-group-item 结构）
+          const listItem = el.closest('.list-group-item');
+          if (listItem) {
+            // 提取作者
+            const authorEl = listItem.querySelector('p.mb-1 a');
+            if (authorEl) {
+              author = authorEl.textContent?.trim() || '未知';
+            }
+            
+            // 提取简介 - 匹配 class="content-txt" 的段落
+            const descEl = listItem.querySelector('p.content-txt');
+            if (descEl) {
+              const descText = descEl.textContent?.trim() || '';
+              if (descText && descText.length > 5 && descText !== '暂无简介') {
+                description = descText.substring(0, 200) || '';
+              }
+            }
+            
+            // 爱丽丝书屋搜索结果页面没有封面图片
+            // 封面需要从详情页获取
+          }
+          
+          if (!isRelevant(title, author, keyword)) return;
           
           results.push({
             id: detailUrl,
             title,
-            author: '未知',
-            coverUrl: '',
-            description: '',
+            author,
+            description,
+            coverUrl: proxifyImage(coverUrl),
             tags: [],
             status: 'Unknown',
             detailUrl,
@@ -2586,73 +2773,201 @@ const aliceswProvider: SourceProvider = {
             sourceName: '爱丽丝书屋'
           });
         });
+        
+        console.log(`[AliceSw] Page ${page} total results so far: ${results.length}喵~`);
+        
+        // 如果当前页结果少于10条，说明没有更多页了
+        if (titleElements.length < 10) {
+          console.log(`[AliceSw] Page ${page} has less than 10 results, stopping pagination喵~`);
+          break;
+        }
+      } catch (e) {
+        console.warn(`[AliceSw] Page ${page} fetch failed: ${e}喵~`);
+        break;
       }
-      
-      console.log(`[AliceSw] Found ${results.length} results 喵~`);
-      return results;
-    } catch (e) {
-      console.warn('[AliceSw] Search failed 喵~', e);
-      return [];
     }
+    
+    console.log(`[AliceSw] Total search results: ${results.length}喵~`);
+    
+    // 从本地缓存恢复封面（只恢复/uploads/下的真实封面）喵~
+    const coverCache = getCoverCache();
+    results.forEach(novel => {
+      const cached = coverCache[novel.title];
+      if (cached && cached.includes('/uploads/')) {
+        novel.coverUrl = cached;
+      }
+    });
+    
+    return results;
   },
   getDetails: async (novel: Novel): Promise<Novel> => {
     console.log(`[AliceSw] Getting details for: ${novel.title} from ${novel.detailUrl}喵~`);
-    const html = await fetchText(novel.detailUrl);
+    
+    let html = '';
+    try {
+      html = await fetchText(novel.detailUrl);
+      console.log(`[AliceSw] HTML length: ${html.length}喵~`);
+    } catch (e) {
+      console.warn(`[AliceSw] Failed to fetch page: ${e}喵~`);
+      throw new Error("获取详情页失败喵~");
+    }
+    
     const doc = parseHTML(html);
     
-    const titleEl = doc.querySelector('h1, h2, [class*="title"]');
+    const titleEl = doc.querySelector('.novel_title');
     if (titleEl) novel.title = titleEl.textContent?.trim() || novel.title;
     
-    const authorLabel = Array.from(doc.querySelectorAll('span, div, p')).find(el => el.textContent?.includes('作者'));
-    if (authorLabel) {
-      const authorText = authorLabel.textContent || '';
-      if (authorText.includes(':')) {
-        novel.author = authorText.split(':')[1].trim();
-      } else if (authorText.includes('：')) {
-        novel.author = authorText.split('：')[1].trim();
-      } else if (authorLabel.nextElementSibling) {
-        novel.author = authorLabel.nextElementSibling.textContent?.trim() || novel.author;
+    const authorEl = doc.querySelector('.novel_info p a[href*="author"]');
+    if (authorEl) novel.author = authorEl.textContent?.trim() || novel.author;
+    
+    let coverSrc = '';
+    const coverImg = doc.querySelector('.pic img.lazyload_book_cover, .pic img.fengmian2, img.lazyload_book_cover.fengmian2, .box_intro .pic img');
+    console.log(`[AliceSw] Cover img found: ${coverImg !== null}喵~`);
+    
+    if (coverImg) {
+      const dataSrc = coverImg.getAttribute('data-src') || '';
+      const srcAttr = coverImg.getAttribute('src') || '';
+      console.log(`[AliceSw] data-src: ${dataSrc}, src: ${srcAttr}喵~`);
+      
+      // 只使用包含 /uploads/ 的真实封面
+      if (dataSrc && dataSrc.includes('/uploads/')) {
+        coverSrc = dataSrc;
+      } else if (srcAttr && srcAttr.includes('/uploads/')) {
+        coverSrc = srcAttr;
       }
     }
     
-    const descEl = doc.querySelector('[class*="desc"], .description, .intro, .summary, article p');
-    if (descEl) {
-      descEl.querySelectorAll('img').forEach(img => img.remove());
-      novel.description = descEl.textContent?.trim() || novel.description;
+    if (coverSrc && coverSrc.includes('321cdn.com')) {
+      novel.coverUrl = proxifyImage(coverSrc);
+      saveCoverCache(novel.title, novel.coverUrl);
+      console.log(`[AliceSw] Cover saved: ${novel.coverUrl}喵~`);
+    } else {
+      console.log(`[AliceSw] No valid cover found, using default 01.png喵~`);
+      const defaultCover = 'https://img.321cdn.com/img/01.png';
+      novel.coverUrl = proxifyImage(defaultCover);
+      // 不缓存默认封面，因为搜索结果已经有默认封面了
     }
     
-    if (!novel.coverUrl) {
-      const coverImg = doc.querySelector('img[src*="cover"], img[class*="cover"], [class*="book-img"] img, .cover img');
-      if (coverImg) {
-        let src = coverImg.getAttribute('src') || coverImg.getAttribute('data-src') || '';
-        if (src && !src.startsWith('http')) {
-          src = new URL(src, ALICESW_URL).href;
+    const jianjieEl = doc.querySelector('.jianjie');
+    if (jianjieEl) {
+      const pEls = jianjieEl.querySelectorAll('p');
+      for (const p of pEls) {
+        const text = p.textContent?.trim() || '';
+        if (text.length > 5 && !text.includes('内容简介') && 
+            !text.includes('爱丽丝书屋所有小说中的人物') &&
+            !text.includes('如果您对') && text !== '暂无简介') {
+          novel.description = text;
+          break;
         }
-        novel.coverUrl = proxifyImage(src);
       }
     }
     
     const chapters: Chapter[] = [];
-    const chapterLinks = doc.querySelectorAll('[class*="chapter"] a, .catalog a, #list a, .chapterlist a, .list-chapter a');
+    // 爱丽丝书屋的章节获取 - 优先级最高
+    const allLinks = doc.querySelectorAll('a');
+    console.log(`[AliceSw] Found ${allLinks.length} total links on page喵~`);
     
-    chapterLinks.forEach((link, index) => {
+    allLinks.forEach((link, index) => {
       const href = link.getAttribute('href');
+      const text = link.textContent?.trim() || '';
       if (!href) return;
       
-      const fullUrl = href.startsWith('http') ? href : new URL(href, novel.detailUrl).href;
-      const title = link.textContent?.trim() || `第${index + 1}章`;
+      // 检查是否是章节链接：包含"第"和"章"，或者链接包含/book/和.html
+      const isChapter = (text.includes('第') && text.includes('章')) || 
+                       (href.includes('/book/') && href.includes('.html') && !href.includes('/novel/'));
       
-      if (!chapters.find(c => c.url === fullUrl)) {
-        chapters.push({
-          number: chapters.length + 1,
-          title,
-          url: fullUrl
-        });
+      if (isChapter) {
+        console.log(`[AliceSw] Found potential chapter: "${text}" -> ${href}喵~`);
+        const fullUrl = href.startsWith('http') ? href : new URL(href, novel.detailUrl).href;
+        if (!chapters.find(c => c.url === fullUrl)) {
+          chapters.push({
+            number: chapters.length + 1,
+            title: text,
+            url: fullUrl
+          });
+        }
       }
     });
     
+    console.log(`[AliceSw] After first pass: ${chapters.length} chapters found喵~`);
+    
+    // 检查是否有"查看所有章节"链接
+    const allChaptersLink = Array.from(allLinks).find(link => 
+      link.textContent?.trim().includes('查看所有章节') || 
+      link.getAttribute('href')?.includes('/other/chapters')
+    );
+    
+    if (allChaptersLink) {
+      const allChaptersHref = allChaptersLink.getAttribute('href');
+      console.log(`[AliceSw] Found "查看所有章节" link: ${allChaptersHref}喵~`);
+      
+      if (allChaptersHref) {
+        try {
+          const allChaptersUrl = allChaptersHref.startsWith('http') 
+            ? allChaptersHref 
+            : new URL(allChaptersHref, novel.detailUrl).href;
+          
+          const allChaptersHtml = await fetchText(allChaptersUrl);
+          const allChaptersDoc = parseHTML(allChaptersHtml);
+          console.log(`[AliceSw] Fetched all chapters page, length: ${allChaptersHtml.length}喵~`);
+          
+          // 从所有章节页面获取章节
+          const allChaptersLinks = allChaptersDoc.querySelectorAll('a');
+          const newChapters: Chapter[] = [];
+          
+          allChaptersLinks.forEach(link => {
+            const href = link.getAttribute('href');
+            const text = link.textContent?.trim() || '';
+            if (!href) return;
+            
+            const isChapter = (text.includes('第') && text.includes('章')) || 
+                             (href.includes('/book/') && href.includes('.html') && !href.includes('/novel/'));
+            
+            if (isChapter) {
+              console.log(`[AliceSw] Found chapter from all-chapters page: "${text}" -> ${href}喵~`);
+              const fullUrl = href.startsWith('http') ? href : new URL(href, allChaptersUrl).href;
+              if (!newChapters.find(c => c.url === fullUrl)) {
+                newChapters.push({
+                  number: newChapters.length + 1,
+                  title: text,
+                  url: fullUrl
+                });
+              }
+            }
+          });
+          
+          if (newChapters.length > 0) {
+            console.log(`[AliceSw] Found ${newChapters.length} chapters from all-chapters page, replacing current list喵~`);
+            chapters.length = 0; // 清空现有章节
+            chapters.push(...newChapters);
+          }
+        } catch (e) {
+          console.error(`[AliceSw] Failed to fetch all chapters page: ${e}喵~`);
+        }
+      }
+    }
+    
+    // 如果没找到，再尝试其他书源的通用选择器
     if (chapters.length === 0) {
-      const allLinks = doc.querySelectorAll('a');
+      const chapterLinks = doc.querySelectorAll('[class*="chapter"] a, .catalog a, #list a, .chapterlist a, .list-chapter a');
+      chapterLinks.forEach((link, index) => {
+        const href = link.getAttribute('href');
+        if (!href) return;
+        
+        const fullUrl = href.startsWith('http') ? href : new URL(href, novel.detailUrl).href;
+        const title = link.textContent?.trim() || `第${index + 1}章`;
+        
+        if (!chapters.find(c => c.url === fullUrl)) {
+          chapters.push({
+            number: chapters.length + 1,
+            title,
+            url: fullUrl
+          });
+        }
+      });
+    }
+    
+    if (chapters.length === 0) {
       allLinks.forEach((link, index) => {
         const href = link.getAttribute('href');
         const text = link.textContent?.trim() || '';
@@ -2675,68 +2990,131 @@ const aliceswProvider: SourceProvider = {
     
     if (chapters.length === 0) throw new Error("未找到章节列表喵~");
     
+    // 调整章节顺序：检查是否是倒序（最后一章是第1章）
+    // 如果标题包含"第"且后面的数字越来越小，就反转数组
+    const firstTitle = chapters[0]?.title || '';
+    const lastTitle = chapters[chapters.length - 1]?.title || '';
+    
+    const getChapterNumber = (title: string): number => {
+      const match = title.match(/第(\d+)/);
+      return match ? parseInt(match[1]) : 0;
+    };
+    
+    const firstNum = getChapterNumber(firstTitle);
+    const lastNum = getChapterNumber(lastTitle);
+    
+    if (firstNum > lastNum && firstNum > 0 && lastNum > 0) {
+      chapters.reverse();
+      // 重新编号
+      chapters.forEach((chapter, index) => {
+        chapter.number = index + 1;
+      });
+    }
+    
     return { ...novel, chapters };
   },
   getChapterContent: async (chapter: Chapter): Promise<string> => {
     console.log(`[AliceSw] Getting content for: ${chapter.title}喵~`);
-    const html = await fetchText(chapter.url);
-    const doc = parseHTML(html);
     
-    const contentEl = doc.querySelector('#content') || 
-                     doc.querySelector('.content') || 
-                     doc.querySelector('[class*="article"]') || 
-                     doc.querySelector('[class*="read-content"]') ||
-                     doc.querySelector('article');
-    if (!contentEl) throw new Error("未找到章节内容喵~");
-    
-    contentEl.querySelectorAll('script, style, ins, .ads, .ad, .advertisement, a').forEach(el => el.remove());
-    
-    let text = contentEl.innerHTML
-      .replace(/<br\s*\/?>/gi, '\n')
-      .replace(/<p[^>]*>/gi, '')
-      .replace(/<\/p>/gi, '\n\n')
-      .replace(/&nbsp;/g, ' ')
-      .replace(/&lt;/g, '<')
-      .replace(/&gt;/g, '>')
-      .replace(/&amp;/g, '&');
-    
-    const tempDiv = document.createElement('div');
-    tempDiv.innerHTML = text;
-    let cleanText = tempDiv.textContent || "";
-    
-    const junkKeywords = [
-      '爱丽丝书屋', 'alicesw.com', 'www.alicesw.com', 'https://www.alicesw.com',
-      '目录', '上一页', '下一页', '尾页', '首页', '返回目录',
-      '章节报错', '免登录', '推荐本书', '加入书架'
-    ];
-    
-    const lines = cleanText.split('\n')
-      .map(line => line.trim())
-      .filter(line => {
-        if (line.length === 0) return false;
-        if (line.length < 20) {
-          const navTerms = ['目录', '上一页', '下一页', '尾页', '首页', '返回目录'];
-          if (navTerms.some(term => line === term)) return false;
+    const parseContent = (html: string): string | null => {
+      const doc = parseHTML(html);
+      const contentEl = doc.querySelector('#j_chapterBox .read-content') ||
+                      doc.querySelector('#j_chapterBox .main-text-wrap') ||
+                      doc.querySelector('.read-content') ||
+                      doc.querySelector('.text-content') ||
+                      doc.querySelector('#content') || 
+                      doc.querySelector('.content') || 
+                      doc.querySelector('article');
+      
+      if (contentEl) {
+        contentEl.querySelectorAll('script, style, ins, .ads, .ad, .advertisement, a').forEach(el => el.remove());
+        
+        let text = contentEl.innerHTML
+          .replace(/<br\s*\/?>/gi, '\n')
+          .replace(/<p[^>]*>/gi, '')
+          .replace(/<\/p>/gi, '\n\n')
+          .replace(/&nbsp;/g, ' ')
+          .replace(/&lt;/g, '<')
+          .replace(/&gt;/g, '>')
+          .replace(/&amp;/g, '&');
+        
+        const tempDiv = document.createElement('div');
+        tempDiv.innerHTML = text;
+        let cleanText = tempDiv.textContent || "";
+        
+        const junkKeywords = [
+          '爱丽丝书屋', 'alicesw.com', 'www.alicesw.com', 'https://www.alicesw.com',
+          '目录', '上一页', '下一页', '尾页', '首页', '返回目录',
+          '章节报错', '免登录', '推荐本书', '加入书架', '章节加载中', '加载中...'
+        ];
+        
+        const lines = cleanText.split('\n')
+          .map(line => line.trim())
+          .filter(line => {
+            if (line.length === 0) return false;
+            if (line.length < 20) {
+              const navTerms = ['目录', '上一页', '下一页', '尾页', '首页', '返回目录'];
+              if (navTerms.some(term => line === term)) return false;
+            }
+            return !junkKeywords.some(kw => line.includes(kw));
+          });
+        
+        if (lines.length > 0) {
+          return lines.join('\n\n');
         }
-        return !junkKeywords.some(kw => line.includes(kw));
-      });
+      }
+      return null;
+    };
     
-    return lines.join('\n\n');
+    // 1. 优先尝试直接 fetch 喵~
+    try {
+      const html = await fetchText(chapter.url);
+      const isLoadingPage = html.includes('章节加载中') || html.includes('加载中...');
+      
+      if (!isLoadingPage) {
+        const content = parseContent(html);
+        if (content) {
+          console.log(`[AliceSw] Direct content fetch successful喵~`);
+          return content;
+        }
+      }
+    } catch (e) {
+      console.warn("[AliceSw] Direct content fetch failed, fallback to browser", e);
+    }
+    
+    // 2. 使用 browser details API 来等待页面加载完成（处理异步内容）
+    try {
+      const browserDetailsUrl = `/api/browser-details?url=${encodeURIComponent(chapter.url)}`;
+      console.log(`[AliceSw] Using browser API to fetch: ${browserDetailsUrl}喵~`);
+      const response = await fetch(browserDetailsUrl);
+      const data = await response.json();
+      
+      if (data.success && data.html) {
+        const content = parseContent(data.html);
+        if (content) {
+          console.log(`[AliceSw] Browser API content fetch successful喵~`);
+          return content;
+        }
+      }
+    } catch (e) {
+      console.error("[AliceSw] Browser API content fetch failed", e);
+    }
+    
+    throw new Error("获取章节内容失败喵~");
   }
 };
 
-export const PROVIDERS: SourceProvider[] = [wanbengeProvider, yedujiProvider, shukugeProvider, dingdianProvider, bqguiProvider, xpxsProvider, aliceswProvider, localProvider];
+export const PROVIDERS: SourceProvider[] = [wanbengeProvider, yedujiProvider, shukugeProvider, dingdianProvider, xpxsProvider, aliceswProvider, localProvider];
 
-// 书源启用/禁用配置喵~ (默认禁用夜读集)
+// 书源启用/禁用配置喵~ (所有书源均已启用，使用浏览器直接访问)
 export const SOURCE_ENABLED_CONFIG: Record<string, boolean> = {
-  '完本阁': true,
-  '夜读集': false,
-  '书库阁': true,
-  '顶点小说网': true,
-  '笔趣阁 (GUI)': true,
-  '虾皮小说': true,
-  '爱丽丝书屋': true,
-  '本地书库': true
+  '完本阁': true,        // 浏览器直接访问
+  '夜读集': true,        // 浏览器直接访问
+  '书库阁': true,        // ✅ 正常工作
+  '顶点小说网': true,     // ✅ 正常工作
+  '虾皮小说': true,      // ✅ 正常工作
+  '爱丽丝书屋': true,    // 浏览器直接访问
+  '本地书库': true       // ✅ 正常工作
 };
 
 // 设置书源启用状态喵~
@@ -2958,8 +3336,8 @@ const getProviderByName = (name: string): SourceProvider | undefined => {
   if (name.includes('夜读集')) return yedujiProvider;
   if (name.includes('书库阁')) return shukugeProvider;
   if (name.includes('顶点小说网')) return dingdianProvider;
-  if (name.includes('笔趣阁(GUI)')) return bqguiProvider;
   if (name.includes('虾皮小说')) return xpxsProvider;
+  if (name.includes('爱丽丝')) return aliceswProvider;
   return undefined;
 };
 

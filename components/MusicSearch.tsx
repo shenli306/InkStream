@@ -358,7 +358,7 @@ export const MusicSearch = forwardRef<MusicSearchRef, MusicSearchProps>(({ onSta
             <input
               type="text"
               name="music-search"
-              autocomplete="off"
+              autoComplete="off"
               value={query}
               onChange={e => setQuery(e.target.value)}
               placeholder="输入歌曲名或歌手名..."

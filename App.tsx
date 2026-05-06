@@ -491,7 +491,7 @@ export default function App() {
                     <input
                       type="text"
                       name="search"
-                      autocomplete="off"
+                      autoComplete="off"
                       value={query}
                       onChange={e => setQuery(e.target.value)}
                       placeholder="输入小说名"

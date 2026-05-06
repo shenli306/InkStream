@@ -44,7 +44,7 @@ export const MangaSearch: React.FC<MangaSearchProps> = ({ onBack }) => {
             <input
               type="text"
               name="manga-search"
-              autocomplete="off"
+              autoComplete="off"
               value={query}
               onChange={e => setQuery(e.target.value)}
               placeholder="输入漫画名..."

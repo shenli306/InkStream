@@ -40,11 +40,11 @@ export const BookCard: React.FC<BookCardProps> = ({ novel, onSelect }) => {
       onMouseLeave={() => setIsHovered(false)}
       style={{
         transform: isHovered ? 'translateY(-4px)' : 'translateY(0)',
-        boxShadow: isHovered ? '0 20px 40px -12px rgba(0,0,0,0.4), 0 0 30px -10px rgba(99,102,241,0.2)' : '0 0 0 1px rgba(255,255,255,0.05)',
+        boxShadow: isHovered ? '0 20px 40px -12px rgba(0,0,0,0.4), 0 0 40px -10px rgba(255,158,206,0.3)' : '0 0 0 1px rgba(255,255,255,0.05)',
       }}
     >
       {/* Animated Gradient Background */}
-      <div className="absolute top-0 left-0 w-full h-40 bg-gradient-to-b from-indigo-500/20 via-purple-500/10 to-transparent opacity-50 group-hover:opacity-80 transition-opacity duration-500" />
+      <div className="absolute top-0 left-0 w-full h-40 bg-gradient-to-b from-pink-500/20 via-pink-500/10 to-transparent opacity-50 group-hover:opacity-80 transition-opacity duration-500" />
       
       {/* Status Badge */}
       <div className="absolute top-3 right-3 z-10">
@@ -74,10 +74,10 @@ export const BookCard: React.FC<BookCardProps> = ({ novel, onSelect }) => {
           </div>
           
           <div className="flex-1 min-w-0">
-            <h3 className="text-lg font-bold text-white mb-1 line-clamp-2 font-serif leading-tight group-hover:text-indigo-200 transition-colors">
+            <h3 className="text-lg font-bold text-white mb-1 line-clamp-2 font-serif leading-tight group-hover:text-pink-200 transition-colors">
               {novel.title}
             </h3>
-            <p className="text-sm text-indigo-300 mb-2 truncate">{novel.author}</p>
+            <p className="text-sm text-pink-300 mb-2 truncate">{novel.author}</p>
             
             {/* Tags */}
             <div className="flex flex-wrap gap-1.5">
