@@ -30,11 +30,20 @@ const isPlaceholderCoverUrl = (url?: string | null) => {
 const resolveCoverUrl = (url?: string | null) => {
   if (!url || isPlaceholderCoverUrl(url)) return null;
   if (url.startsWith('/api/')) return url;
+  
+  let decodedUrl = url;
   try {
-    const isLocalDev = window.location.hostname === 'localhost' && window.location.protocol === 'http:';
-    if (isLocalDev) return url;
-  } catch {
+    decodedUrl = decodeURIComponent(url);
+  } catch {}
+  
+  const lowerDecoded = decodedUrl.toLowerCase();
+  if (lowerDecoded.includes('321cdn.com') || 
+      lowerDecoded.includes('alicdn.com') || 
+      lowerDecoded.includes('taobao.org') ||
+      lowerDecoded.includes('alipay.com')) {
+    return decodedUrl;
   }
+  
   if (url.startsWith('http')) return `/api/proxy?url=${encodeURIComponent(url)}`;
   return url;
 };
