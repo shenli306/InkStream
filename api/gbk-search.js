@@ -1,47 +1,56 @@
+export const config = {
+  runtime: 'nodejs',
+  maxDuration: 30,
+};
 
 import iconv from 'iconv-lite';
 
-export default async function handler(req, res) {
-  const { target, keyword, method = 'GET', data } = req.query;
+export default async function handler(req) {
+  const url = new URL(req.url);
+  const target = url.searchParams.get('target');
+  const keyword = url.searchParams.get('keyword');
+  const method = url.searchParams.get('method') || 'GET';
+  const data = url.searchParams.get('data');
 
   if (!target || !keyword) {
-    return res.status(400).send("Missing parameters");
+    return new Response("Missing parameters", { status: 400 });
   }
 
   try {
-      // Encode keyword to GBK
-      const buf = iconv.encode(keyword, 'gbk');
-      let encodedKeyword = '';
-      for (let i = 0; i < buf.length; i++) {
-          encodedKeyword += '%' + buf[i].toString(16).toUpperCase().padStart(2, '0');
-      }
+    const buf = iconv.encode(keyword, 'gbk');
+    let encodedKeyword = '';
+    for (let i = 0; i < buf.length; i++) {
+      encodedKeyword += '%' + buf[i].toString(16).toUpperCase().padStart(2, '0');
+    }
 
-      let finalUrl = target.replace('{keyword}', encodedKeyword);
-      
-      const fetchOptions = {
-          method: method,
-          headers: {
-             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-             'Referer': 'https://www.jizai22.com/'
-          }
-      };
-      
-      if (method === 'POST' && data) {
-          fetchOptions.body = data.replace('{keyword}', encodedKeyword);
-          fetchOptions.headers['Content-Type'] = 'application/x-www-form-urlencoded';
+    let finalUrl = target.replace('{keyword}', encodedKeyword);
+    
+    const fetchOptions = {
+      method: method,
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Referer': 'https://www.jizai22.com/'
       }
+    };
+    
+    if (method === 'POST' && data) {
+      fetchOptions.body = data.replace('{keyword}', encodedKeyword);
+      fetchOptions.headers['Content-Type'] = 'application/x-www-form-urlencoded';
+    }
 
-      const response = await fetch(finalUrl, fetchOptions);
-      const buffer = await response.arrayBuffer();
-      
-      // We assume the response is GBK (or whatever the site returns), usually HTML
-      // We pass it back as binary/buffer and let the frontend decode it using TextDecoder('gb18030')
-      // but we should set the content type.
-      
-      res.setHeader('Content-Type', 'text/html; charset=gbk');
-      res.send(Buffer.from(buffer));
+    const response = await fetch(finalUrl, fetchOptions);
+    const buffer = await response.arrayBuffer();
+    
+    const newHeaders = new Headers();
+    newHeaders.set('Content-Type', 'text/html; charset=gbk');
+    newHeaders.set('Access-Control-Allow-Origin', '*');
+    
+    return new Response(Buffer.from(buffer), {
+      status: response.status,
+      headers: newHeaders
+    });
   } catch (e) {
-      console.error("GBK Search Error:", e);
-      res.status(500).send(e.message);
+    console.error("GBK Search Error:", e);
+    return new Response(e.message, { status: 500 });
   }
 }

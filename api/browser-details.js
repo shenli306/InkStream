@@ -1,5 +1,9 @@
 
-// Stub for browser details
+export const config = {
+  runtime: 'nodejs',
+  maxDuration: 30,
+};
+
 export default async function handler(req, res) {
   res.status(200).json({ 
     success: false, 

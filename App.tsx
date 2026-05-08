@@ -881,32 +881,6 @@ export default function App() {
 
       </main>
 
-      {/* 手机端底部导航栏 */}
-      {isMobile && (
-        <div className="fixed bottom-0 left-0 right-0 bg-black/80 backdrop-blur-xl border-t border-white/10 py-3 px-4 flex justify-around items-center z-50">
-          <button
-            onClick={() => handleViewSwitch('novel')}
-            className={`flex flex-col items-center gap-1 ${activeView === 'novel' ? 'text-white' : 'text-white/40'}`}
-          >
-            <Book size={20} />
-            <span className="text-xs">小说</span>
-          </button>
-          <button
-            onClick={() => handleViewSwitch('manga')}
-            className={`flex flex-col items-center gap-1 ${activeView === 'manga' ? 'text-white' : 'text-white/40'}`}
-          >
-            <BookOpen size={20} />
-            <span className="text-xs">漫画</span>
-          </button>
-          <button
-            onClick={() => handleViewSwitch('music')}
-            className={`flex flex-col items-center gap-1 ${activeView === 'music' ? 'text-white' : 'text-white/40'}`}
-          >
-            <LucideMusic size={20} />
-            <span className="text-xs">音乐</span>
-          </button>
-        </div>
-      )}
 
     </div>
   );

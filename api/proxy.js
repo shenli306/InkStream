@@ -1,7 +1,55 @@
 
 export const config = {
-  runtime: 'edge',
+  runtime: 'nodejs',
+  maxDuration: 30,
 };
+
+const RETRY_ATTEMPTS = 2;
+const TIMEOUT_MS = 25000;
+
+async function fetchWithTimeout(url, options, timeout = TIMEOUT_MS) {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeout);
+  
+  try {
+    const response = await fetch(url, {
+      ...options,
+      signal: controller.signal
+    });
+    clearTimeout(timeoutId);
+    return response;
+  } catch (error) {
+    clearTimeout(timeoutId);
+    throw error;
+  }
+}
+
+async function fetchWithRetry(url, options, retries = RETRY_ATTEMPTS) {
+  let lastError;
+  
+  for (let i = 0; i <= retries; i++) {
+    try {
+      const response = await fetchWithTimeout(url, options);
+      
+      if (!response.ok && response.status >= 500 && i < retries) {
+        console.log(`[Proxy] Attempt ${i + 1} failed with status ${response.status}, retrying...`);
+        await new Promise(resolve => setTimeout(resolve, 1000 * (i + 1)));
+        continue;
+      }
+      
+      return response;
+    } catch (error) {
+      lastError = error;
+      console.log(`[Proxy] Attempt ${i + 1} failed: ${error.message}, retrying...`);
+      
+      if (i < retries) {
+        await new Promise(resolve => setTimeout(resolve, 1000 * (i + 1)));
+      }
+    }
+  }
+  
+  throw lastError;
+}
 
 export default async function handler(req) {
   const url = new URL(req.url);
@@ -38,9 +86,11 @@ export default async function handler(req) {
     try {
       const urlObj = new URL(targetUrl);
       headers.set('Origin', urlObj.origin);
+      headers.set('Accept', '*/*');
+      headers.set('Accept-Language', 'zh-CN,zh;q=0.9,en;q=0.8');
     } catch (e) {}
 
-    const response = await fetch(targetUrl, {
+    const response = await fetchWithRetry(targetUrl, {
       headers: headers,
       method: req.method,
       redirect: 'follow'
@@ -48,6 +98,8 @@ export default async function handler(req) {
 
     const newHeaders = new Headers(response.headers);
     newHeaders.set('Access-Control-Allow-Origin', '*');
+    newHeaders.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    newHeaders.set('Access-Control-Allow-Headers', 'Content-Type, Authorization');
     newHeaders.delete('Content-Security-Policy');
     newHeaders.delete('X-Frame-Options');
 
@@ -64,6 +116,18 @@ export default async function handler(req) {
       headers: newHeaders
     });
   } catch (error) {
-    return new Response(`Proxy error: ${error.message}`, { status: 500 });
+    console.error('[Proxy] Final error:', error.message);
+    
+    if (error.name === 'AbortError') {
+      return new Response('Request timeout. Please try again.', { 
+        status: 504,
+        headers: { 'Access-Control-Allow-Origin': '*' }
+      });
+    }
+    
+    return new Response(`Proxy error: ${error.message}`, { 
+      status: 500,
+      headers: { 'Access-Control-Allow-Origin': '*' }
+    });
   }
 }
