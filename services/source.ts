@@ -441,8 +441,11 @@ const proxifyImage = (url: string) => {
   if (!url) return '';
   
   if (url.startsWith('/api/proxy?url=')) return url;
-  if (url.startsWith('//')) return `/api/proxy?url=${encodeURIComponent(`https:${url}`)}`;
+  if (url.startsWith('//')) return `https:${url}`;
   if (url.startsWith('http://') || url.startsWith('https://')) {
+    if (url.includes('321cdn.com') || url.includes('alicdn.com') || url.includes('taobao.org')) {
+      return url;
+    }
     return `/api/proxy?url=${encodeURIComponent(url)}`;
   }
 
