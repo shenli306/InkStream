@@ -22,6 +22,14 @@
         font-family: 'Noto Serif SC', serif;
       }
       
+      /* 蓝粉渐变主题变量 */
+      :root {
+        --cat-pink: #ff9ece;
+        --cat-blue: #82c3f9;
+        --gradient-main: linear-gradient(135deg, var(--cat-pink), var(--cat-blue));
+        --gradient-hover: linear-gradient(135deg, #ffb6d9, #a8d8f8);
+      }
+      
       /* Floating Lyrics Animation */
       @keyframes float-up {
         0% {
@@ -47,7 +55,7 @@
         animation-fill-mode: both;
       }
       
-      /* Glassmorphism Utilities */
+      /* Glassmorphism Utilities - 蓝粉版本 */
       .glass-panel {
         position: relative;
         overflow: hidden;
@@ -55,7 +63,7 @@
         backdrop-filter: blur(24px) saturate(180%);
         -webkit-backdrop-filter: blur(24px) saturate(180%);
         border: 1px solid rgba(255, 255, 255, 0.12);
-        box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37), 0 0 20px rgba(99, 102, 241, 0.3);
+        box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37), 0 0 30px rgba(255, 158, 206, 0.3);
         border-radius: 3rem;
       }
 
@@ -67,8 +75,9 @@
         backdrop-filter: blur(24px) saturate(180%);
         -webkit-backdrop-filter: blur(24px) saturate(180%);
         border: 1px solid rgba(255, 255, 255, 0.15);
-        box-shadow: 0 8px 40px -12px rgba(0, 0, 0, 0.5), 0 0 20px rgba(99, 102, 241, 0.3);
+        box-shadow: 0 8px 40px -12px rgba(0, 0, 0, 0.5), 0 0 30px rgba(255, 158, 206, 0.3);
         border-radius: 2.5rem;
+        transform-origin: center;
       }
 
       /* Marquee animation for scrolling text */
@@ -91,7 +100,7 @@
       @supports not (backdrop-filter: blur(24px)) {
         .glass-panel {
           background: rgba(0, 0, 0, 0.7);
-          box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37), 0 0 20px rgba(99, 102, 241, 0.3);
+          box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37), 0 0 30px rgba(255, 158, 206, 0.3);
         }
       }
 
@@ -100,7 +109,7 @@
         pointer-events: none;
         position: absolute;
         inset: 0;
-        background: linear-gradient(135deg, rgba(255,255,255,0.1) 0%, transparent 50%, rgba(255,255,255,0.05) 100%);
+        background: linear-gradient(135deg, rgba(255,158,206,0.15) 0%, transparent 50%, rgba(130,195,249,0.15) 100%);
         opacity: 0.5;
         border-radius: inherit;
       }
@@ -113,7 +122,7 @@
         backdrop-filter: blur(14px) saturate(160%);
         -webkit-backdrop-filter: blur(14px) saturate(160%);
         border-radius: 2rem;
-        box-shadow: 0 0 20px rgba(99, 102, 241, 0.2);
+        box-shadow: 0 0 20px rgba(255, 158, 206, 0.3);
       }
 
       /* Search box specific style */
@@ -125,36 +134,36 @@
         backdrop-filter: blur(14px) saturate(160%);
         -webkit-backdrop-filter: blur(14px) saturate(160%);
         border-radius: 2rem !important;
-        box-shadow: 0 0 20px rgba(99, 102, 241, 0.15);
+        box-shadow: 0 0 30px rgba(255, 158, 206, 0.25);
         transition: all 0.3s ease;
       }
       
       .search-box:focus-within,
       .search-box:has(input:not(:placeholder-shown)) {
-        border-color: rgba(255, 255, 255, 0.2);
-        box-shadow: 0 0 30px rgba(99, 102, 241, 0.3);
+        border-color: rgba(255, 158, 206, 0.4);
+        box-shadow: 0 0 40px rgba(255, 158, 206, 0.4);
       }
 
       .search-box-glow {
         position: absolute;
         inset: 0;
-        background: linear-gradient(90deg, rgba(99, 102, 241, 0.3), rgba(168, 85, 247, 0.3), rgba(236, 72, 153, 0.3));
+        background: linear-gradient(90deg, rgba(255,158,206,0.4), rgba(168,195,249,0.4), rgba(255,158,206,0.4));
         filter: blur(20px);
-        opacity: 0.1;
+        opacity: 0.15;
         border-radius: 2rem;
         pointer-events: none;
         transition: opacity 0.3s ease;
       }
       
       .search-box:focus-within .search-box-glow {
-        opacity: 0.25;
+        opacity: 0.35;
       }
 
       /* Fallback for browsers that don't support backdrop-filter */
       @supports not (backdrop-filter: blur(14px)) {
         .glass-input {
           background: rgba(0, 0, 0, 0.7);
-          box-shadow: 0 0 20px rgba(99, 102, 241, 0.2);
+          box-shadow: 0 0 30px rgba(255, 158, 206, 0.3);
         }
       }
 
@@ -168,19 +177,9 @@
         color: rgba(255, 255, 255, 0.2);
       }
 
-      .glass-input::before {
-        content: '';
-        pointer-events: none;
-        position: absolute;
-        inset: -30%;
-        background: radial-gradient(circle at 25% 25%, rgba(255,255,255,0.18), transparent 55%),
-                    radial-gradient(circle at 75% 75%, rgba(163, 148, 255, 0.14), transparent 55%);
-        opacity: 0.7;
-        mix-blend-mode: screen;
-        animation: fluidGlass 8s ease-in-out infinite;
-      }
 
-      /* Custom Scrollbar */
+
+      /* Custom Scrollbar - 蓝粉风格 */
       ::-webkit-scrollbar {
         width: 8px;
       }
@@ -188,7 +187,7 @@
         background: transparent; 
       }
       ::-webkit-scrollbar-thumb {
-        background: rgba(255, 255, 255, 0.2); 
+        background: linear-gradient(180deg, var(--cat-pink), var(--cat-blue));
         border-radius: 10px;
       }
 
@@ -196,30 +195,56 @@
       @media (max-width: 768px) {
         .glass-panel {
           border-radius: 3rem !important;
-          box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37), 0 0 20px rgba(99, 102, 241, 0.3) !important;
+          box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37), 0 0 30px rgba(255, 158, 206, 0.3) !important;
         }
         
         .glass-input {
           border-radius: 2rem !important;
-          box-shadow: 0 0 20px rgba(99, 102, 241, 0.2) !important;
+          box-shadow: 0 0 30px rgba(255, 158, 206, 0.3) !important;
         }
         
         .glass-island {
           border-radius: 2.5rem !important;
-          box-shadow: 0 8px 40px -12px rgba(0, 0, 0, 0.5), 0 0 20px rgba(99, 102, 241, 0.3) !important;
+          box-shadow: 0 8px 40px -12px rgba(0, 0, 0, 0.5), 0 0 30px rgba(255, 158, 206, 0.3) !important;
         }
         
         .search-box {
           border-radius: 2rem !important;
-          box-shadow: 0 0 20px rgba(99, 102, 241, 0.2) !important;
+          box-shadow: 0 0 30px rgba(255, 158, 206, 0.3) !important;
         }
         
         .search-box-glow {
           border-radius: 2rem !important;
         }
       }
+      
+      /* 蓝粉渐变按钮样式 */
+      .btn-gradient {
+        background: var(--gradient-main);
+        transition: all 0.3s ease;
+        box-shadow: 0 4px 15px rgba(255, 158, 206, 0.4);
+      }
+      .btn-gradient:hover {
+        background: var(--gradient-hover);
+        transform: translateY(-2px);
+        box-shadow: 0 6px 20px rgba(255, 158, 206, 0.5);
+      }
+      
+      /* 渐变文字效果 */
+      .text-gradient {
+        background: var(--gradient-main);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+      }
     </style>
     <style>
+      /* 确保灵动岛从中心展开 */
+      .dynamic-island-wrapper,
+      .dynamic-island-inner {
+        transform-origin: center !important;
+      }
+      
       /* 3068 书源选择器动画喵~ */
       @keyframes source-circle-return {
         0% { left: 0px; transform: scale(1); }
@@ -250,8 +275,8 @@
         }
       }
       @keyframes glow-pulse {
-        0%, 100% { box-shadow: 0 0 20px rgba(99, 102, 241, 0.5); }
-        50% { box-shadow: 0 0 40px rgba(99, 102, 241, 0.8), 0 0 60px rgba(168, 85, 247, 0.4); }
+        0%, 100% { box-shadow: 0 0 30px rgba(255, 158, 206, 0.6); }
+        50% { box-shadow: 0 0 50px rgba(255, 158, 206, 0.9), 0 0 70px rgba(130, 195, 249, 0.5); }
       }
       @keyframes laser-shoot {
         0% { width: 0%; filter: brightness(1); }
@@ -275,15 +300,15 @@
       .search-shrink { animation: search-shrink 700ms cubic-bezier(0.4, 0, 0.2, 1) forwards; }
       .search-expand { animation: search-expand 800ms cubic-bezier(0.4, 0, 0.2, 1) forwards; }
 
-      /* Light Pillar Background (ReactBits Light Pillar inspired) */
+      /* Light Pillar Background - 蓝粉版本 */
       .light-pillar {
         position: absolute;
         inset: 0;
         pointer-events: none;
-        background: radial-gradient(circle at 50% 10%, rgba(82, 39, 255, 0.35), transparent 45%),
-                    radial-gradient(circle at 50% 95%, rgba(255, 159, 252, 0.35), transparent 55%);
+        background: radial-gradient(circle at 50% 10%, rgba(255, 158, 206, 0.4), transparent 45%),
+                    radial-gradient(circle at 50% 95%, rgba(130, 195, 249, 0.4), transparent 55%);
         mix-blend-mode: screen;
-        opacity: 0.9;
+        opacity: 0.95;
         overflow: hidden;
       }
 
@@ -291,7 +316,7 @@
         content: '';
         position: absolute;
         inset: -20%;
-        background: linear-gradient(180deg, rgba(82, 39, 255, 0.65), rgba(255, 159, 252, 0.25) 45%, rgba(0, 0, 0, 0) 90%);
+        background: linear-gradient(180deg, rgba(255, 158, 206, 0.7), rgba(130, 195, 249, 0.3) 45%, rgba(0, 0, 0, 0) 90%);
         filter: blur(88px);
         transform: rotate(25deg) translateX(-10%);
         animation: pillar-rotate 35s linear infinite;
@@ -301,8 +326,8 @@
         content: '';
         position: absolute;
         inset: -10%;
-        background: radial-gradient(circle at 50% 40%, rgba(255, 255, 255, 0.12), transparent 60%),
-                    radial-gradient(circle at 50% 60%, rgba(255, 255, 255, 0.08), transparent 60%);
+        background: radial-gradient(circle at 50% 40%, rgba(255, 255, 255, 0.15), transparent 60%),
+                    radial-gradient(circle at 50% 60%, rgba(255, 255, 255, 0.1), transparent 60%);
         filter: blur(32px);
         mix-blend-mode: screen;
         animation: pillar-flicker 6s ease-in-out infinite;
@@ -502,7 +527,7 @@
   }
 }
 </script>
-  <script type="module" crossorigin src="/assets/index-VFytQiFR.js"></script>
+  <script type="module" crossorigin src="/assets/index-ChFbdNMh.js"></script>
 </head>
   <body class="antialiased selection:bg-indigo-500 selection:text-white">
     <div id="root"></div>

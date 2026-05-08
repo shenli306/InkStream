@@ -518,7 +518,7 @@ export const MusicSearch = forwardRef<MusicSearchRef, MusicSearchProps>(({ onSta
                   <img src={currentMusic.cover} alt={currentMusic.name} className="w-full h-full object-cover" />
                 ) : (
                   <div className="w-full h-full bg-gradient-to-br from-pink-500/30 to-rose-500/30 flex items-center justify-center">
-                    <Disc size={16} sm:text={24} className="text-pink-400/60" />
+                  <Disc className="w-4 h-4 sm:w-6 sm:h-6 text-pink-400/60" />
                   </div>
                 )}
               </div>
@@ -532,16 +532,16 @@ export const MusicSearch = forwardRef<MusicSearchRef, MusicSearchProps>(({ onSta
               {/* Controls */}
               <div className="flex items-center gap-0 sm:gap-1">
                 <button onClick={handleSkipBack} className="w-8 h-8 sm:w-9 sm:h-9 rounded-lg hover:bg-white/10 flex items-center justify-center text-white/70 hover:text-white transition-colors">
-                  <SkipBack size={14} sm:text={18} />
+                  <SkipBack className="w-3.5 h-3.5 sm:w-4.5 sm:h-4.5" />
                 </button>
                 <button 
                   onClick={() => isPlaying ? audioRef.current?.pause() : audioRef.current?.play()}
                   className="w-9 h-9 sm:w-10 sm:h-10 lg:w-12 lg:h-12 rounded-full bg-gradient-to-r from-pink-500 to-rose-500 flex items-center justify-center shadow-lg shadow-pink-500/30 hover:scale-105 active:scale-95 transition-transform"
                 >
-                  {isPlaying ? <Pause size={16} sm:text={18} lg:text={20} className="text-white" /> : <Play size={16} sm:text={18} lg:text={20} className="text-white ml-0.5" />}
+                  {isPlaying ? <Pause className="w-4 h-4 sm:w-5 sm:h-5 lg:w-6 lg:h-6 text-white" /> : <Play className="w-4 h-4 sm:w-5 sm:h-5 lg:w-6 lg:h-6 text-white ml-0.5" />}
                 </button>
                 <button onClick={handleSkipForward} className="w-8 h-8 sm:w-9 sm:h-9 rounded-lg hover:bg-white/10 flex items-center justify-center text-white/70 hover:text-white transition-colors">
-                  <SkipForward size={14} sm:text={18} />
+                  <SkipForward className="w-3.5 h-3.5 sm:w-4.5 sm:h-4.5" />
                 </button>
               </div>
 

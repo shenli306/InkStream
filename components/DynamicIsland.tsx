@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useRef, useCallback, useMemo } from 'react';
 import { AppState } from '../types';
-import { HardDriveDownload, CheckCircle2, Search, BookOpen, Music as LucideMusic, Book } from 'lucide-react';
+import { HardDriveDownload, CheckCircle2, Search, BookOpen, Music as LucideMusic, Book, Download } from 'lucide-react';
 
 import { Music } from '../services/musicSource';
 
