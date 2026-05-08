@@ -441,10 +441,20 @@ const proxifyImage = (url: string) => {
   if (!url) return '';
   
   if (url.startsWith('/api/proxy?url=')) return url;
+  
+  let decodedUrl = url;
+  try {
+    decodedUrl = decodeURIComponent(url);
+  } catch {}
+  
   if (url.startsWith('//')) return `https:${url}`;
   if (url.startsWith('http://') || url.startsWith('https://')) {
-    if (url.includes('321cdn.com') || url.includes('alicdn.com') || url.includes('taobao.org')) {
-      return url;
+    const checkUrl = decodedUrl.toLowerCase();
+    if (checkUrl.includes('321cdn.com') || 
+        checkUrl.includes('alicdn.com') || 
+        checkUrl.includes('taobao.org') ||
+        checkUrl.includes('alipay.com')) {
+      return decodedUrl;
     }
     return `/api/proxy?url=${encodeURIComponent(url)}`;
   }
@@ -2824,23 +2834,61 @@ const aliceswProvider: SourceProvider = {
     if (authorEl) novel.author = authorEl.textContent?.trim() || novel.author;
     
     let coverSrc = '';
-    const coverImg = doc.querySelector('.pic img.lazyload_book_cover, .pic img.fengmian2, img.lazyload_book_cover.fengmian2, .box_intro .pic img');
+    const coverSelectors = [
+      '.pic img.lazyload_book_cover',
+      '.pic img.fengmian2',
+      'img.lazyload_book_cover.fengmian2',
+      '.box_intro .pic img',
+      '.novel-detail .pic img',
+      '.cover-img',
+      '.book-cover img',
+      '.novel-pic img',
+      'img[data-original]',
+      'img[data-lazy]',
+      'img[data-src]',
+      '.content img'
+    ];
+    
+    let coverImg = null;
+    for (const selector of coverSelectors) {
+      coverImg = doc.querySelector(selector);
+      if (coverImg) {
+        console.log(`[AliceSw] Found cover with selector: ${selector}喵~`);
+        break;
+      }
+    }
+    
     console.log(`[AliceSw] Cover img found: ${coverImg !== null}喵~`);
     
     if (coverImg) {
       const dataSrc = coverImg.getAttribute('data-src') || '';
+      const dataOriginal = coverImg.getAttribute('data-original') || '';
+      const dataLazy = coverImg.getAttribute('data-lazy') || '';
       const srcAttr = coverImg.getAttribute('src') || '';
-      console.log(`[AliceSw] data-src: ${dataSrc}, src: ${srcAttr}喵~`);
+      console.log(`[AliceSw] data-src: ${dataSrc}, data-original: ${dataOriginal}, data-lazy: ${dataLazy}, src: ${srcAttr}喵~`);
       
-      // 只使用包含 /uploads/ 的真实封面
-      if (dataSrc && dataSrc.includes('/uploads/')) {
-        coverSrc = dataSrc;
-      } else if (srcAttr && srcAttr.includes('/uploads/')) {
-        coverSrc = srcAttr;
+      const possibleCovers = [dataSrc, dataOriginal, dataLazy, srcAttr].filter(url => {
+        if (!url || url.length < 10) return false;
+        const lower = url.toLowerCase();
+        return lower.includes('/uploads/') || 
+               lower.includes('321cdn.com') || 
+               lower.includes('alicdn.com') ||
+               lower.includes('cover') ||
+               lower.includes('fengmian') ||
+               lower.includes('book') ||
+               (lower.includes('http') && (lower.includes('jpg') || lower.includes('jpeg') || lower.includes('png') || lower.includes('webp')));
+      });
+      
+      if (possibleCovers.length > 0) {
+        coverSrc = possibleCovers[0];
+        console.log(`[AliceSw] Selected cover: ${coverSrc}喵~`);
       }
     }
     
-    if (coverSrc && coverSrc.includes('321cdn.com')) {
+    if (coverSrc) {
+      if (!coverSrc.startsWith('http')) {
+        coverSrc = 'https://www.alicesw.com' + (coverSrc.startsWith('/') ? coverSrc : '/' + coverSrc);
+      }
       novel.coverUrl = proxifyImage(coverSrc);
       saveCoverCache(novel.title, novel.coverUrl);
       console.log(`[AliceSw] Cover saved: ${novel.coverUrl}喵~`);
@@ -2848,7 +2896,6 @@ const aliceswProvider: SourceProvider = {
       console.log(`[AliceSw] No valid cover found, using default 01.png喵~`);
       const defaultCover = 'https://img.321cdn.com/img/01.png';
       novel.coverUrl = proxifyImage(defaultCover);
-      // 不缓存默认封面，因为搜索结果已经有默认封面了
     }
     
     const jianjieEl = doc.querySelector('.jianjie');
