@@ -100,6 +100,17 @@ export default function App() {
   const [photoPage, setPhotoPage] = useState(1);
   const [photoHasMore, setPhotoHasMore] = useState(false);
   const resolvedCoverUrl = resolveCoverUrl(selectedNovel?.coverUrl);
+  
+  // 组件加载时重置书源配置为默认值 喵~
+  useEffect(() => {
+    try {
+      // 清除旧的书源配置，强制启用所有书源
+      localStorage.removeItem('inkstream_source_config');
+      console.log('[App] 已重置书源配置为默认值 喵~');
+    } catch (e) {
+      console.warn('[App] 清除书源配置失败 喵~', e);
+    }
+  }, []);
 
   const fetchVideos = async (page: number, sort: 'desc' | 'asc', isLoadMore = false) => {
     setIsVideoLoading(true);

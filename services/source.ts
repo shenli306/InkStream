@@ -85,11 +85,18 @@ const directDingdianSearch = async (keyword: string): Promise<Novel[]> => {
           if (!seenUrls.has(detailUrl) && isRelevant(title, author, keyword)) {
             seenUrls.add(detailUrl);
             
+            let coverUrl = coverEl?.getAttribute('data-original') || coverEl?.getAttribute('src') || '';
+            if (coverUrl) {
+              if (!coverUrl.startsWith('http')) {
+                coverUrl = new URL(coverUrl, DINGDIAN_URL).href;
+              }
+              coverUrl = proxifyImage(coverUrl);
+            }
             results.push({
               id: detailUrl,
               title,
               author,
-              coverUrl: coverEl?.getAttribute('data-original') || coverEl?.getAttribute('src') || '',
+              coverUrl: coverUrl,
               description: descEl?.textContent?.trim() || '',
               tags: [],
               status: 'Unknown',
@@ -531,6 +538,16 @@ const wanbengeProvider: SourceProvider = {
               const canonical = doc.querySelector('link[rel="canonical"]')?.getAttribute('href');
               const detailUrl = canonical || "";
               
+              const coverUrlRaw = doc.querySelector('.img-thumbnail')?.getAttribute('src') || 
+                          doc.querySelector('.bookimg img')?.getAttribute('src') || "";
+              let coverUrl = coverUrlRaw;
+              if (coverUrl) {
+                if (!coverUrl.startsWith('http')) {
+                  coverUrl = `${WANBENGE_URL}${coverUrl.startsWith('/') ? '' : '/'}${coverUrl}`;
+                }
+                coverUrl = proxifyImage(coverUrl);
+              }
+              
               results.push({
                 id: detailUrl || title,
                 title: title,
@@ -538,8 +555,7 @@ const wanbengeProvider: SourceProvider = {
                         doc.querySelector('.author')?.textContent?.trim() || "未知",
                 description: doc.querySelector('#bookIntro')?.textContent?.trim() || 
                              doc.querySelector('.bookintro')?.textContent?.trim() || "",
-                coverUrl: doc.querySelector('.img-thumbnail')?.getAttribute('src') || 
-                          doc.querySelector('.bookimg img')?.getAttribute('src') || "",
+                coverUrl: coverUrl,
                 tags: [],
                 status: 'Unknown',
                 detailUrl: detailUrl,
@@ -625,7 +641,11 @@ const wanbengeProvider: SourceProvider = {
                       if (!results.some(r => r.detailUrl === detailUrl)) {
                           const imgEl = el.querySelector('img');
                           const coverSrc = imgEl?.getAttribute('src') || '';
-                          const coverUrl = coverSrc ? (coverSrc.startsWith('http') ? coverSrc : `${WANBENGE_URL}${coverSrc.startsWith('/') ? '' : '/'}${coverSrc}`) : '';
+                          let coverUrl = '';
+                          if (coverSrc) {
+                            coverUrl = coverSrc.startsWith('http') ? coverSrc : `${WANBENGE_URL}${coverSrc.startsWith('/') ? '' : '/'}${coverSrc}`;
+                            coverUrl = proxifyImage(coverUrl);
+                          }
                           
                           results.push({
                               id: detailUrl,
@@ -1727,7 +1747,8 @@ const dingdianProvider: SourceProvider = {
     if (coverImg) {
       const src = coverImg.getAttribute('data-original') || coverImg.getAttribute('data-src') || coverImg.getAttribute('src');
       if (src) {
-        novel.coverUrl = src.startsWith('http') ? src : new URL(src, novel.detailUrl).href;
+        let coverUrl = src.startsWith('http') ? src : new URL(src, novel.detailUrl).href;
+        novel.coverUrl = proxifyImage(coverUrl);
       }
     }
     
@@ -2098,7 +2119,10 @@ const bqguiProvider: SourceProvider = {
     const coverImg = doc.querySelector('.bookimg img') || doc.querySelector('#fmimg img');
     if (coverImg) {
         const src = coverImg.getAttribute('src');
-        if (src) novel.coverUrl = src.startsWith('http') ? src : new URL(src, novel.detailUrl).href;
+        if (src) {
+          let coverUrl = src.startsWith('http') ? src : new URL(src, novel.detailUrl).href;
+          novel.coverUrl = proxifyImage(coverUrl);
+        }
     }
     
     // 提取简介
@@ -2417,6 +2441,7 @@ const xpxsProvider: SourceProvider = {
         coverUrl = `${XPXS_URL}${coverUrl}`;
     }
     if (isPlaceholderCoverUrl(coverUrl)) coverUrl = "";
+    if (coverUrl) coverUrl = proxifyImage(coverUrl);
     
     const statusCandidates = Array.from(doc.querySelectorAll('.bookdes p, .bookinfo p, .bookdes span, .bookinfo span'))
         .map(el => el.textContent?.trim() || '')
@@ -3179,11 +3204,30 @@ export const setSourceEnabled = (sourceName: string, enabled: boolean): void => 
 
 // 从 localStorage 加载书源配置喵~
 export const loadSourceConfig = (): Record<string, boolean> => {
+  // 确保默认所有书源都是启用的
+  const defaultConfig: Record<string, boolean> = {
+    '完本阁': true,
+    '夜读集': true,
+    '书库阁': true,
+    '顶点小说网': true,
+    '虾皮小说': true,
+    '爱丽丝书屋': true,
+    '本地书库': true
+  };
+  
+  // 先重置为默认配置
+  Object.assign(SOURCE_ENABLED_CONFIG, defaultConfig);
+  
   try {
     const saved = localStorage.getItem('inkstream_source_config');
     if (saved) {
       const parsed = JSON.parse(saved);
-      Object.assign(SOURCE_ENABLED_CONFIG, parsed);
+      // 只合并已有的书源配置，保持默认值的同时允许用户自定义
+      Object.keys(parsed).forEach(key => {
+        if (key in SOURCE_ENABLED_CONFIG) {
+          SOURCE_ENABLED_CONFIG[key] = parsed[key];
+        }
+      });
     }
   } catch (e) {
     console.warn('[Source] Failed to load source config from localStorage喵~', e);
