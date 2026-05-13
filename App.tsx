@@ -40,7 +40,9 @@ const resolveCoverUrl = (url?: string | null) => {
   if (lowerDecoded.includes('321cdn.com') || 
       lowerDecoded.includes('alicdn.com') || 
       lowerDecoded.includes('taobao.org') ||
-      lowerDecoded.includes('alipay.com')) {
+      lowerDecoded.includes('alipay.com') ||
+      lowerDecoded.includes('doubaocdn.com') ||
+      lowerDecoded.includes('aka.doubaocdn.com')) {
     return decodedUrl;
   }
   

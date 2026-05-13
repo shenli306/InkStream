@@ -460,7 +460,9 @@ const proxifyImage = (url: string) => {
     if (checkUrl.includes('321cdn.com') || 
         checkUrl.includes('alicdn.com') || 
         checkUrl.includes('taobao.org') ||
-        checkUrl.includes('alipay.com')) {
+        checkUrl.includes('alipay.com') ||
+        checkUrl.includes('doubaocdn.com') ||
+        checkUrl.includes('aka.doubaocdn.com')) {
       return decodedUrl;
     }
     return `/api/proxy?url=${encodeURIComponent(url)}`;
