@@ -24,12 +24,12 @@ export function VideoModal({ video, onClose }: VideoModalProps) {
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 md:p-8">
       {/* 遮罩层喵~ */}
       <div 
-        className="absolute inset-0 bg-black/90 backdrop-blur-xl animate-in fade-in duration-500"
+        className="absolute inset-0 bg-black/90 backdrop-blur-xl animate-overlay-in gpu-accelerated"
         onClick={onClose}
       />
 
       {/* 内容区域喵~ */}
-      <div className="relative w-full max-w-5xl aspect-video glass-panel rounded-[2.5rem] overflow-hidden border border-white/10 shadow-2xl animate-in zoom-in-95 duration-500">
+      <div className="relative w-full max-w-5xl aspect-video glass-panel rounded-[2.5rem] overflow-hidden border border-white/10 shadow-2xl animate-modal-in gpu-accelerated">
         {/* 顶部控制栏喵~ */}
         <div className="absolute top-0 left-0 right-0 p-6 flex items-center justify-between z-10 bg-gradient-to-b from-black/80 to-transparent">
           <h2 className="text-white font-bold truncate pr-12 text-lg drop-shadow-md">
@@ -37,7 +37,8 @@ export function VideoModal({ video, onClose }: VideoModalProps) {
           </h2>
           <button 
             onClick={onClose}
-            className="p-3 bg-white/10 hover:bg-white/20 rounded-full text-white/80 transition-all hover:rotate-90 active:scale-90 border border-white/10"
+            className="p-3 bg-white/10 hover:bg-white/20 rounded-full text-white/80 hover:rotate-90 active:scale-90 border border-white/10 gpu-accelerated"
+            style={{ transition: 'background-color 200ms cubic-bezier(0.4,0,0.2,1), transform 300ms cubic-bezier(0.34,1.56,0.64,1)' }}
           >
             <X size={24} />
           </button>

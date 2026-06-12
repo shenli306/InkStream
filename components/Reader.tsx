@@ -28,9 +28,9 @@ export const Reader: React.FC<ReaderProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-0 sm:p-4">
-      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm transition-opacity" onClick={onClose} />
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm animate-overlay-in gpu-accelerated" onClick={onClose} />
       
-      <div className="relative bg-black/40 backdrop-blur-3xl w-full max-w-4xl h-[100dvh] sm:h-[90vh] sm:rounded-[2.5rem] shadow-2xl flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-300 border border-white/10">
+      <div className="relative bg-black/40 backdrop-blur-3xl w-full max-w-4xl h-[100dvh] sm:h-[90vh] sm:rounded-[2.5rem] shadow-2xl flex flex-col overflow-hidden animate-modal-in gpu-accelerated border border-white/10">
         
         {/* Header - Glass Bar */}
         <div className="h-20 flex items-center justify-between px-8 border-b border-white/10 shrink-0 bg-white/5 backdrop-blur-xl">
@@ -40,7 +40,7 @@ export const Reader: React.FC<ReaderProps> = ({
           </div>
           <button 
             onClick={onClose}
-            className="p-2.5 bg-white/10 hover:bg-white/20 rounded-full transition-colors text-white/80"
+            className="p-2.5 bg-white/10 hover:bg-white/20 rounded-full text-white/80" style={{ transition: 'background-color 200ms cubic-bezier(0.4,0,0.2,1)' }}
           >
             <X size={20} />
           </button>
@@ -67,7 +67,8 @@ export const Reader: React.FC<ReaderProps> = ({
           <button 
             onClick={onPrev}
             disabled={!hasPrev || isLoading}
-            className="flex items-center gap-2 px-6 py-3 rounded-full bg-white/5 hover:bg-white/15 text-sm font-medium text-white/80 disabled:opacity-30 disabled:hover:bg-white/5 transition-all"
+            className="flex items-center gap-2 px-6 py-3 rounded-full bg-white/5 hover:bg-white/15 active:scale-95 text-sm font-medium text-white/80 disabled:opacity-30 disabled:hover:bg-white/5 gpu-accelerated"
+            style={{ transition: 'background-color 200ms cubic-bezier(0.4,0,0.2,1), transform 150ms cubic-bezier(0.4,0,0.2,1), opacity 250ms cubic-bezier(0.4,0,0.2,1)' }}
           >
             <ChevronLeft size={18} /> 上一章
           </button>
@@ -79,7 +80,8 @@ export const Reader: React.FC<ReaderProps> = ({
           <button 
              onClick={onNext}
              disabled={!hasNext || isLoading}
-             className="flex items-center gap-2 px-6 py-3 rounded-full bg-white/5 hover:bg-white/15 text-sm font-medium text-white/80 disabled:opacity-30 disabled:hover:bg-white/5 transition-all"
+             className="flex items-center gap-2 px-6 py-3 rounded-full bg-white/5 hover:bg-white/15 active:scale-95 text-sm font-medium text-white/80 disabled:opacity-30 disabled:hover:bg-white/5 gpu-accelerated"
+             style={{ transition: 'background-color 200ms cubic-bezier(0.4,0,0.2,1), transform 150ms cubic-bezier(0.4,0,0.2,1), opacity 250ms cubic-bezier(0.4,0,0.2,1)' }}
           >
             下一章 <ChevronRight size={18} />
           </button>

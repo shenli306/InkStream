@@ -81,8 +81,8 @@ export const DynamicIsland: React.FC<DynamicIslandProps> = ({ state, progress, m
   const isExpanded = showSuccess || state === AppState.SEARCHING || state === AppState.DOWNLOADING || state === AppState.PARSING || state === AppState.PACKING || (activeView === 'music' && musicInfo && (musicInfo.currentMusic && musicInfo.isPlaying || musicInfo.isSearching || musicInfo.isDownloading || musicInfo.isDownloadComplete));
   const isLongPressActive = longPressPhase === 'separated';
 
-  const smoothTransition = "transition-all duration-400 ease-[cubic-bezier(0.4,0.0,0.2,1)]";
-  const expandTransition = "transition-all duration-500 cubic-bezier(0.34,1.56,0.64,1)]";
+  const smoothTransition = "transition-[width,height,border-radius,opacity] duration-400 ease-[cubic-bezier(0.4,0.0,0.2,1)]";
+  const expandTransition = "transition-[width,height,border-radius,opacity] duration-500 cubic-bezier(0.34,1.56,0.64,1)]";
 
   const handlePressStart = useCallback(() => {
     if (isExpanded || isLongPressActive || longPressPhase !== 'idle') return;
@@ -782,7 +782,10 @@ const SeparatedIcons: React.FC<SeparatedIconsProps> = React.memo(({ onClick, onR
       position: 'absolute',
       top: '50%',
       marginTop: '-22px',
-      transition: isAnimating ? 'all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)' : 'all 0.5s cubic-bezier(0.34, 1.56, 0.64, 1)',
+      transition: isAnimating
+        ? 'left 300ms cubic-bezier(0.34,1.56,0.64,1), right 300ms cubic-bezier(0.34,1.56,0.64,1), transform 300ms cubic-bezier(0.34,1.56,0.64,1), opacity 250ms cubic-bezier(0.4,0,0.2,1), scale 250ms cubic-bezier(0.4,0,0.2,1)'
+        : 'left 500ms cubic-bezier(0.34,1.56,0.64,1), right 500ms cubic-bezier(0.34,1.56,0.64,1), transform 500ms cubic-bezier(0.34,1.56,0.64,1), opacity 400ms cubic-bezier(0.4,0,0.2,1), scale 400ms cubic-bezier(0.4,0,0.2,1)',
+      willChange: 'transform, opacity, left, right',
     };
 
     const isCenter = icon.position === 'center';
@@ -865,7 +868,7 @@ const SeparatedIcons: React.FC<SeparatedIconsProps> = React.memo(({ onClick, onR
         onMouseEnter={() => setHoveredIcon(iconData.id)}
         onMouseLeave={() => setHoveredIcon(null)}
         disabled={isAnimating}
-        className="relative w-[44px] h-[44px] rounded-full flex items-center justify-center transition-all duration-300 disabled:cursor-not-allowed overflow-visible focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70 focus-visible:ring-offset-2 focus-visible:ring-offset-purple-600"
+        className="relative w-[44px] h-[44px] rounded-full flex items-center justify-center disabled:cursor-not-allowed overflow-visible focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70 focus-visible:ring-offset-2 focus-visible:ring-offset-purple-600"
         style={{
           ...getPositionStyle(iconData, index),
           background: `linear-gradient(135deg, var(--tw-gradient-stops))`,
@@ -873,6 +876,7 @@ const SeparatedIcons: React.FC<SeparatedIconsProps> = React.memo(({ onClick, onR
             ? `0 0 50px ${iconData.shadowColor}, 0 0 80px ${iconData.shadowColor.replace('0.7', '0.3')}` 
             : `0 0 35px ${iconData.shadowColor}`,
           transform: `${getPositionStyle(iconData, index).transform} ${isHovered ? 'scale(1.1)' : 'scale(1)'}`,
+          transition: 'transform 200ms cubic-bezier(0.4,0,0.2,1), box-shadow 300ms cubic-bezier(0.4,0,0.2,1), opacity 300ms cubic-bezier(0.4,0,0.2,1)',
           willChange: 'transform, box-shadow',
           transformOrigin: 'center',
         }}
@@ -881,10 +885,10 @@ const SeparatedIcons: React.FC<SeparatedIconsProps> = React.memo(({ onClick, onR
         <div className={`absolute inset-0 rounded-full bg-gradient-to-br ${iconData.gradient}`} />
         
         {/* 内部光晕 */}
-        <div className="absolute inset-0 rounded-full bg-gradient-to-br from-white/30 to-transparent opacity-40 group-hover:opacity-60 transition-all duration-300" />
+        <div className="absolute inset-0 rounded-full bg-gradient-to-br from-white/30 to-transparent opacity-40 group-hover:opacity-60" style={{ transition: 'opacity 300ms cubic-bezier(0.4,0,0.2,1)' }} />
         
         {/* 旋转光效 */}
-        <div className={`absolute inset-0 rounded-full bg-gradient-to-r from-transparent via-white/15 to-transparent opacity-0 ${isHovered || isCenter ? 'opacity-100' : ''} transition-opacity duration-500`} />
+        <div className={`absolute inset-0 rounded-full bg-gradient-to-r from-transparent via-white/15 to-transparent opacity-0 ${isHovered || isCenter ? 'opacity-100' : ''}`} style={{ transition: 'opacity 500ms cubic-bezier(0.4,0,0.2,1)' }} />
         
         {/* 脉冲光环 */}
         {(isHovered || isCenter) && (
@@ -928,7 +932,7 @@ const SeparatedIcons: React.FC<SeparatedIconsProps> = React.memo(({ onClick, onR
   return (
     <div 
       ref={containerRef}
-      className="relative animate-in fade-in duration-400"
+      className="relative animate-enter-fade gpu-accelerated"
       style={{
         width: '260px',
         height: '80px',

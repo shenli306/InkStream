@@ -1,0 +1,260 @@
+/* =============================
+   InkStream 统一动画系统
+   基于 iOS 灵动岛风格缓动曲线
+   ============================= */
+
+/* ---- 设计令牌 ---- */
+:root {
+  /* 缓动曲线 */
+  --ease-standard: cubic-bezier(0.4, 0.0, 0.2, 1.0);   /* 标准出入 */
+  --ease-decelerate: cubic-bezier(0.0, 0.0, 0.2, 1.0);  /* 减速进入(仅 ease-out) */
+  --ease-accelerate: cubic-bezier(0.4, 0.0, 1.0, 1.0);  /* 加速离开(仅 ease-in) */
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1.0);    /* 弹性回弹 */
+  --ease-smooth: cubic-bezier(0.25, 0.1, 0.25, 1.0);     /* 平滑过渡 */
+
+  /* 动画时长体系 */
+  --dur-instant: 100ms;   /* 即时反馈(hover/active/ripple) */
+  --dur-fast: 150ms;      /* 快速过渡(checkbox/开关/徽章) */
+  --dur-normal: 250ms;    /* 标准过渡(hover颜色/边框/常规UI) */
+  --dur-slow: 400ms;      /* 慢速过渡(模态框/弹窗/页面切换) */
+  --dur-entrance: 500ms;  /* 入场动画(列表级联/大组件出现) */
+}
+
+/* ---- GPU 加速工具类 ---- */
+.gpu-accelerated {
+  will-change: transform, opacity;
+  transform: translateZ(0);
+  backface-visibility: hidden;
+  contain: layout style;
+}
+
+.gpu-transform-only {
+  will-change: transform;
+  transform: translateZ(0);
+  contain: layout;
+}
+
+/* ---- Hover / Active 交互 ---- */
+.interactive-hover {
+  transition: transform var(--dur-fast) var(--ease-standard),
+              box-shadow var(--dur-normal) var(--ease-standard);
+}
+.interactive-hover:hover {
+  transform: translateY(-2px) scale(1.01);
+}
+.interactive-hover:active {
+  transform: translateY(0) scale(0.98);
+}
+
+/* 轻量级 hover - 仅颜色变化 */
+.interactive-glow {
+  transition: box-shadow var(--dur-normal) var(--ease-standard),
+              border-color var(--dur-normal) var(--ease-standard);
+}
+
+/* ---- 入场动画 ---- */
+.animate-enter-fade {
+  animation: enter-fade var(--dur-entrance) var(--ease-decelerate) both;
+  will-change: opacity;
+}
+
+.animate-enter-slide-up {
+  animation: enter-slide-up var(--dur-entrance) var(--ease-decelerate) both;
+  will-change: transform, opacity;
+  transform: translateZ(0);
+}
+
+.animate-enter-scale {
+  animation: enter-scale var(--dur-slow) var(--ease-spring) both;
+  will-change: transform, opacity;
+  transform: translateZ(0);
+}
+
+@keyframes enter-fade {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+@keyframes enter-slide-up {
+  from { opacity: 0; transform: translateY(16px); }
+  to   { opacity: 1; transform: translateY(0);    }
+}
+
+@keyframes enter-scale {
+  from { opacity: 0; transform: scale(0.92); }
+  to   { opacity: 1; transform: scale(1);    }
+}
+
+/* ---- 模态框 / 弹窗 ---- */
+@keyframes modal-in {
+  from { opacity: 0; transform: scale(0.95) translateY(8px); }
+  to   { opacity: 1; transform: scale(1) translateY(0);     }
+}
+
+@keyframes modal-out {
+  from { opacity: 1; transform: scale(1) translateY(0);     }
+  to   { opacity: 0; transform: scale(0.95) translateY(8px); }
+}
+
+@keyframes overlay-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+.animate-modal-in {
+  animation: modal-in var(--dur-slow) var(--ease-spring) both;
+  will-change: transform, opacity;
+  transform: translateZ(0);
+}
+
+.animate-overlay-in {
+  animation: overlay-in var(--dur-slow) var(--ease-standard) both;
+  will-change: opacity;
+}
+
+/* ---- 骨架屏 / 加载 ---- */
+@keyframes shimmer {
+  0%   { transform: translateX(-100%); }
+  100% { transform: translateX(100%);  }
+}
+
+@keyframes skeleton-pulse {
+  0%, 100% { opacity: 0.4; }
+  50%      { opacity: 0.8; }
+}
+
+.animate-shimmer {
+  animation: shimmer 1.5s var(--ease-standard) infinite;
+  will-change: transform;
+  transform: translateZ(0);
+}
+
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    rgba(255,255,255,0.04) 25%,
+    rgba(255,255,255,0.08) 50%,
+    rgba(255,255,255,0.04) 75%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.5s var(--ease-standard) infinite;
+  border-radius: 0.75rem;
+  will-change: transform;
+  transform: translateZ(0);
+}
+
+/* ---- 灵动岛脉搏 ---- */
+@keyframes island-pulse {
+  0%, 100% { opacity: 0.6; transform: scaleX(0.8); }
+  50%      { opacity: 1;   transform: scaleX(1);   }
+}
+
+.animate-island-pulse {
+  animation: island-pulse 2s var(--ease-smooth) infinite;
+}
+
+/* ---- 缩放弹入 ---- */
+@keyframes scale-in {
+  from { opacity: 0; transform: scale(0); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+.animate-scale-in {
+  animation: scale-in var(--dur-slow) var(--ease-spring) both;
+  will-change: transform, opacity;
+  transform: translateZ(0);
+}
+
+/* ---- 页面切换 / 路由 ---- */
+@keyframes page-enter {
+  from { opacity: 0; transform: translateY(24px); }
+  to   { opacity: 1; transform: translateY(0);    }
+}
+
+@keyframes page-exit {
+  from { opacity: 1; transform: translateY(0);     }
+  to   { opacity: 0; transform: translateY(-12px); }
+}
+
+.page-enter {
+  animation: page-enter var(--dur-entrance) var(--ease-decelerate) both;
+  will-change: transform, opacity;
+  transform: translateZ(0);
+}
+
+/* ---- 淡入淡出（用于视图切换） ---- */
+@keyframes view-fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+.view-fade-in {
+  animation: view-fade-in var(--dur-slow) var(--ease-standard) both;
+}
+
+/* ---- 滚动驱动 ---- */
+.scroll-fade-in {
+  opacity: 0;
+  transform: translateY(16px);
+  transition: opacity var(--dur-normal) var(--ease-standard),
+              transform var(--dur-normal) var(--ease-standard);
+  will-change: transform, opacity;
+}
+
+.scroll-fade-in.visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* ---- 搜索框 / 输入框焦点 ---- */
+.search-focus-ring {
+  transition: box-shadow var(--dur-normal) var(--ease-standard),
+              border-color var(--dur-normal) var(--ease-standard);
+}
+
+/* ---- 卡片悬浮 ---- */
+.card-hover {
+  transition: transform var(--dur-fast) var(--ease-standard),
+              box-shadow var(--dur-normal) var(--ease-standard),
+              border-color var(--dur-normal) var(--ease-standard);
+  will-change: transform;
+  transform: translateZ(0);
+}
+
+.card-hover:hover {
+  transform: translateY(-4px) translateZ(0);
+  box-shadow: 0 20px 40px -12px rgba(0,0,0,0.4), 0 0 40px -10px rgba(255,158,206,0.3);
+}
+
+/* ---- 列表项级联动画延迟 ---- */
+.stagger-1  { animation-delay: 50ms;  }
+.stagger-2  { animation-delay: 100ms; }
+.stagger-3  { animation-delay: 150ms; }
+.stagger-4  { animation-delay: 200ms; }
+.stagger-5  { animation-delay: 250ms; }
+.stagger-6  { animation-delay: 300ms; }
+.stagger-7  { animation-delay: 350ms; }
+.stagger-8  { animation-delay: 400ms; }
+.stagger-9  { animation-delay: 450ms; }
+.stagger-10 { animation-delay: 500ms; }
+
+/* ---- 回到顶部按钮 ---- */
+@keyframes float-up {
+  from { opacity: 0; transform: translateY(16px) scale(0.8); }
+  to   { opacity: 1; transform: translateY(0) scale(1);     }
+}
+
+.scroll-to-top {
+  animation: float-up var(--dur-normal) var(--ease-spring) both;
+  will-change: transform, opacity;
+  transform: translateZ(0);
+}
+
+/* ---- 减小运动偏好 ---- */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

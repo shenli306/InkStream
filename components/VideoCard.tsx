@@ -142,7 +142,8 @@ export function VideoCard({ video, onSelect }: VideoCardProps) {
     <div 
       ref={containerRef}
       onClick={handleClick}
-      className="group relative glass-panel rounded-3xl overflow-hidden cursor-pointer transition-all duration-500 hover:scale-[1.02] hover:shadow-[0_20px_40px_-15px_rgba(255,158,206,0.3)] border border-white/10 hover:border-pink-500/30"
+      className="group relative glass-panel rounded-3xl overflow-hidden cursor-pointer hover:scale-[1.02] border border-white/10 hover:border-pink-500/30 card-hover gpu-accelerated"
+      style={{ transition: 'transform 200ms cubic-bezier(0.4,0,0.2,1), box-shadow 300ms cubic-bezier(0.4,0,0.2,1), border-color 300ms cubic-bezier(0.4,0,0.2,1)' }}
     >
       {/* 隐藏的视频元素用于提取元数据，仅在进入视口并排队成功后加载喵~ */}
       {shouldLoadMetadata && !thumbnail && (
@@ -167,10 +168,10 @@ export function VideoCard({ video, onSelect }: VideoCardProps) {
         )}
         
         {/* 悬浮层喵~ */}
-        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent opacity-60 group-hover:opacity-40 transition-opacity" />
+        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent opacity-60 group-hover:opacity-40" style={{ transition: 'opacity 400ms cubic-bezier(0.4,0,0.2,1)' }} />
         
         {/* 播放按钮喵~ */}
-        <div className="absolute inset-0 flex items-center justify-center scale-75 group-hover:scale-100 opacity-0 group-hover:opacity-100 transition-all duration-500">
+        <div className="absolute inset-0 flex items-center justify-center scale-75 group-hover:scale-100 opacity-0 group-hover:opacity-100 gpu-accelerated" style={{ transition: 'transform 400ms cubic-bezier(0.34,1.56,0.64,1), opacity 400ms cubic-bezier(0.4,0,0.2,1)' }}>
           <div className="w-16 h-16 bg-gradient-to-br from-pink-400 to-blue-400 rounded-full flex items-center justify-center shadow-xl">
             <Play size={32} className="text-white fill-white ml-1" />
           </div>
