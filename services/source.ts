@@ -1,22 +1,23 @@
 import { Novel, Chapter, AppState, NovelSource } from "../types";
 import pLimit from 'p-limit';
+import { SmartSelector, AdaptiveFetcher, ElementTracker, selectorRegistry } from "../scrapling";
+import type { SelectorGroup, ExtractionResult } from "../scrapling";
 
 const WANBENGE_URL = "https://www.jizai22.com";
-const YEDUJI_URL = "https://www.yeduji.com";
 const BASE_URL = "https://www.jizai22.com"; // Fallback
 
 const SHIJIEMINGZHU_URL = "https://www.shijiemingzhu.com";
 const SHUKUGE_URL = "http://www.shukuge.com";
 const DINGDIAN_URL = "https://www.23ddw.net";
 const BQGUI_URL = "https://www.bqgui.cc";
-const XPXS_URL = "https://www.xpxs.net";
+// xpxs.net domain is for sale - source removed
 const ALICESW_URL = "https://www.alicesw.com";
 
 // 搜索缓存喵~ 5分钟过期时间
 const searchCache = new Map<string, { results: Novel[]; timestamp: number }>();
 const CACHE_DURATION = 5 * 60 * 1000; // 5分钟喵~
 
-type SourceKey = 'wanbenge' | 'local' | 'yeduji' | 'shukuge' | 'dingdian' | 'bqgui' | 'xpxs' | 'alicesw';
+type SourceKey = 'wanbenge' | 'local' | 'shukuge' | 'dingdian' | 'bqgui' | 'alicesw';
 
 const parseHTML = (html: string) => new DOMParser().parseFromString(html, "text/html");
 
@@ -297,11 +298,10 @@ const PROXY_LIST = [
   (url: string) => {
     if (typeof window !== 'undefined' && window.location.hostname === 'localhost') {
         if (url.includes('www.jizai22.com')) return url.replace('https://www.jizai22.com', '/proxy/wanbenge');
-        if (url.includes('www.yeduji.com')) return url.replace('https://www.yeduji.com', '/proxy/yeduji');
         if (url.includes('www.shukuge.com')) return url.replace('http://www.shukuge.com', '/proxy/shukuge');
         if (url.includes('www.23ddw.net')) return url.replace('https://www.23ddw.net', '/proxy/dingdian');
         if (url.includes('www.alicesw.com')) return url.replace('https://www.alicesw.com', '/proxy/alicesw');
-        if (url.includes('www.xpxs.net')) return url.replace('https://www.xpxs.net', '/proxy/xpxs');
+        // xpxs.net removed - domain is for sale
     }
     return url;
   },
@@ -1051,281 +1051,6 @@ export const fetchCoverFromBrowser = async (title: string, author: string): Prom
     console.warn("[Cover] Browser cover search failed喵~", e);
   }
   return null;
-};
-
-const yedujiProvider: SourceProvider = {
-  key: 'yeduji',
-  name: '夜读集',
-  baseUrl: YEDUJI_URL,
-  search: async (keyword: string): Promise<Novel[]> => {
-    console.log(`[Yeduji] Searching for: ${keyword}喵~`);
-    let results: Novel[] = [];
-    
-    // 使用公共代理搜索喵~
-    const publicProxy = (url: string) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`;
-    
-    // 夜读集搜索 URL 格式：/search?keyword=关键词
-    const searchUrl = `${YEDUJI_URL}/search?keyword=${encodeURIComponent(keyword)}`;
-    const proxyUrl = publicProxy(searchUrl);
-    console.log(`[Yeduji] Search URL: ${proxyUrl}喵~`);
-    
-    // 夜读集使用 GBK 编码，需要特殊处理
-    try {
-      const html = await fetchText(proxyUrl, undefined, 'gbk');
-      console.log(`[Yeduji] HTML length: ${html.length}喵~`);
-      if (html.length < 500) {
-        console.log(`[Yeduji] HTML sample: ${html.substring(0, 200)}喵~`);
-      }
-      const doc = parseHTML(html);
-      
-      // 搜索结果在 .novel-item 容器中
-      const items = doc.querySelectorAll('.novel-item');
-      
-      items.forEach(item => {
-        const titleEl = item.querySelector('.title') || item.querySelector('a[href*="/book/"]');
-        const title = titleEl?.textContent?.trim() || "";
-        const href = titleEl?.getAttribute('href');
-        
-        if (!title || !href) return;
-        
-        const detailUrl = href.startsWith('http') ? href : `${YEDUJI_URL}${href}`;
-        const author = item.querySelector('.author')?.textContent?.trim() || "未知";
-        const description = item.querySelector('.desc')?.textContent?.trim() || "";
-        const coverImg = item.querySelector('.cover img');
-        let coverUrl = coverImg?.getAttribute('data-src') || coverImg?.getAttribute('src') || "";
-        
-        if (coverUrl && !coverUrl.startsWith('http')) {
-          coverUrl = `${YEDUJI_URL}${coverUrl}`;
-        }
-        
-        // 统一使用代理处理封面 喵~
-        coverUrl = proxifyImage(coverUrl);
-
-        // 尝试从列表项提取标签喵~
-        const tags: string[] = [];
-        const tagDt = Array.from(item.querySelectorAll('dl dt')).find(dt => dt.textContent?.includes('标签'));
-        if (tagDt) {
-            const dd = tagDt.nextElementSibling;
-            if (dd) {
-                dd.querySelectorAll('a').forEach(a => {
-                    if (a.textContent) tags.push(a.textContent.trim());
-                });
-            }
-        }
-
-        results.push({
-          id: detailUrl,
-          title: title,
-          author: author,
-          description: description,
-          coverUrl: coverUrl,
-          tags: tags,
-          status: 'Unknown',
-          detailUrl: detailUrl,
-          chapters: [],
-          sourceName: '夜读集'
-        });
-      });
-
-      console.log(`[Yeduji] Found ${results.length} items on page喵~`);
-    } catch (e) {
-      console.warn(`[Yeduji] Direct fetch failed: ${e}喵~`);
-    }
-
-    // Fallback to browser search
-    if (results.length === 0) {
-      try {
-        const browserSearchUrl = `/api/browser-search?site=yeduji&keyword=${encodeURIComponent(keyword)}`;
-        const response = await fetch(browserSearchUrl);
-        const data = await response.json();
-        if (data.success && data.results) {
-          results = data.results.map((item: any) => ({
-            id: item.detailUrl,
-            title: item.title,
-            author: item.author || '未知',
-            coverUrl: item.coverUrl || '',
-            description: item.description || '',
-            tags: [],
-            status: 'Unknown',
-            chapters: [],
-            sourceName: '夜读集',
-            detailUrl: item.detailUrl
-          }));
-        }
-      } catch (e) {
-        console.warn("Yeduji browser search fallback failed", e);
-      }
-    }
-
-    return results;
-  },
-  getDetails: async (novel: Novel): Promise<Novel> => {
-    console.log(`[Yeduji] Getting details for: ${novel.title} from ${novel.detailUrl}喵~`);
-    const html = await fetchText(novel.detailUrl);
-    console.log(`[Yeduji] Detail HTML length: ${html.length}喵~`);
-    const doc = parseHTML(html);
-
-    // 提取封面
-    const coverImg = doc.querySelector('main img[src*="/data/cover/"]') || doc.querySelector('main img');
-    if (coverImg) {
-      let src = coverImg.getAttribute('src');
-      if (src) {
-        src = src.startsWith('http') ? src : `${YEDUJI_URL}${src}`;
-        novel.coverUrl = proxifyImage(src);
-      }
-    }
-
-    // 提取作者
-    const authorLabel = Array.from(doc.querySelectorAll('main span, main div')).find(el => el.textContent?.includes('作者'));
-    if (authorLabel) {
-      const authorValue = authorLabel.nextElementSibling;
-      novel.author = authorValue?.textContent?.trim() || novel.author;
-    }
-
-    // 提取状态
-    const statusLabel = Array.from(doc.querySelectorAll('main span, main div')).find(el => el.textContent?.includes('状态'));
-    if (statusLabel) {
-      const statusValue = statusLabel.nextElementSibling;
-      const statusText = statusValue?.textContent?.trim() || "";
-      novel.status = statusText.includes('完结') ? 'Completed' : 'Serializing';
-    }
-
-    // 提取简介
-    const descEl = doc.querySelector('main p') || doc.querySelector('.desc');
-    if (descEl) {
-      novel.description = descEl.textContent?.trim() || novel.description;
-    }
-
-    // 提取标签喵~
-    const tagDt = Array.from(doc.querySelectorAll('dl dt')).find(dt => dt.textContent?.includes('标签'));
-    if (tagDt) {
-        const dd = tagDt.nextElementSibling;
-        if (dd) {
-            const tags: string[] = [];
-            dd.querySelectorAll('a').forEach(a => {
-                if (a.textContent) tags.push(a.textContent.trim());
-            });
-            if (tags.length > 0) novel.tags = tags;
-        }
-    }
-
-    // 获取章节列表
-    const listUrl = novel.detailUrl.endsWith('/') ? `${novel.detailUrl}list/` : `${novel.detailUrl}/list/`;
-    console.log(`[Yeduji] Fetching chapter list from: ${listUrl}喵~`);
-    const listHtml = await fetchText(listUrl);
-    console.log(`[Yeduji] Chapter list HTML length: ${listHtml.length}喵~`);
-    console.log(`[Yeduji] Chapter list HTML start: ${listHtml.substring(0, 500)}喵~`);
-    const listDoc = parseHTML(listHtml);
-    
-    const chapters: Chapter[] = [];
-    // 夜读集的列表页通常是 <ul><li><a href="..."><h4>标题</h4></a></li></ul>
-    // 或者直接是 a 标签
-    const chapterLinks = Array.from(listDoc.querySelectorAll('a[href*=".html"]'))
-        .filter(a => {
-            const href = a.getAttribute('href') || '';
-            // 排除掉一些非章节链接，比如分类、首页等
-            return !href.includes('/category/') && !href.includes('/list/') && !href.includes('/book/') || href.split('/').length > 3;
-        });
-    
-    console.log(`[Yeduji] Found ${chapterLinks.length} filtered links in list page喵~`);
-    
-    chapterLinks.forEach((a, index) => {
-      const href = a.getAttribute('href');
-      if (!href) return;
-      
-      const fullUrl = href.startsWith('http') ? href : `${YEDUJI_URL}${href}`;
-      const title = a.querySelector('h4')?.textContent?.trim() || 
-                    a.querySelector('span')?.textContent?.trim() ||
-                    a.textContent?.replace('免费', '').replace('VIP', '').trim() || 
-                    `第${index + 1}章`;
-      
-      // 避免重复链接
-      if (!chapters.find(c => c.url === fullUrl)) {
-          chapters.push({
-            number: chapters.length + 1,
-            title: title,
-            url: fullUrl
-          });
-      }
-    });
-
-    if (chapters.length === 0) {
-        console.log(`[Yeduji] No chapters in list page, trying detail page fallback喵~`);
-        // Try detail page as fallback for chapters
-        const detailChapterLinks = doc.querySelectorAll('main a[href*=".html"]');
-        console.log(`[Yeduji] Found ${detailChapterLinks.length} links in detail page喵~`);
-        detailChapterLinks.forEach((a, index) => {
-             const href = a.getAttribute('href');
-             if (!href || href.includes('list/')) return;
-             const fullUrl = href.startsWith('http') ? href : `${YEDUJI_URL}${href}`;
-             const title = a.querySelector('h4')?.textContent?.trim() || a.textContent?.replace('免费', '').replace('VIP', '').trim() || `第${index + 1}章`;
-             if (!chapters.find(c => c.url === fullUrl)) {
-                 chapters.push({
-                     number: chapters.length + 1,
-                     title: title,
-                     url: fullUrl
-                 });
-             }
-        });
-    }
-
-    console.log(`[Yeduji] Total chapters found: ${chapters.length}喵~`);
-    if (chapters.length === 0) throw new Error("未找到章节列表喵~");
-    return { ...novel, chapters };
-  },
-  getChapterContent: async (chapter: Chapter): Promise<string> => {
-    console.log(`[Yeduji] Getting content for: ${chapter.title}喵~`);
-    const html = await fetchText(chapter.url);
-    const doc = parseHTML(html);
-    
-    // 内容通常在 article 或特定的 div 中
-    const contentEl = doc.querySelector('article') || doc.querySelector('.content') || doc.querySelector('#content');
-    if (!contentEl) throw new Error("未找到章节内容喵~");
-
-    // 移除不必要的元素
-    contentEl.querySelectorAll('script, style, ins, .ads, .breadcrumb').forEach(el => el.remove());
-
-    let text = contentEl.innerHTML
-      .replace(/<br\s*\/?>/gi, '\n')
-      .replace(/<p[^>]*>/gi, '')
-      .replace(/<\/p>/gi, '\n\n')
-      .replace(/&nbsp;/g, ' ')
-      .replace(/&lt;/g, '<')
-      .replace(/&gt;/g, '>')
-      .replace(/&amp;/g, '&');
-
-    const tempDiv = document.createElement('div');
-    tempDiv.innerHTML = text;
-    
-    const cleanText = tempDiv.textContent || "";
-    const lines = cleanText.split('\n');
-    
-    const finalLines = lines
-      .map(line => line.trim())
-      .filter(l => {
-        if (l.length === 0) return false;
-        
-        const junkKeywords = [
-          '夜读集', 'www.', '目录', '上一页', '下一页', '尾页', '首页', 
-          'Top', '返回目录', '获取失败', '第阅读记录页', '推荐本书', '举报错误', '本章以完，期待您的下一章'
-        ];
-        
-        if (l.length < 20) {
-          const navTerms = ['目录', '上一页', '下一页', '尾页', '首页', 'Top', '阅读记录'];
-          if (navTerms.some(term => l === term || l.includes(` ${term} `) || l.startsWith(`${term} `) || l.endsWith(` ${term}`))) {
-            return false;
-          }
-          const words = l.split(/\s+/);
-          if (words.length > 1 && words.every(w => navTerms.includes(w) || /^[0-9\-\/]+$/.test(w))) {
-            return false;
-          }
-        }
-        
-        return !junkKeywords.some(kw => l.includes(kw));
-      });
-
-    return finalLines.join('\n\n');
-  }
 };
 
 const cleanShukugeTitle = (title: string) => {
@@ -2300,424 +2025,9 @@ const bqguiProvider: SourceProvider = {
   }
 };
 
-const xpxsProvider: SourceProvider = {
-  key: 'xpxs',
-  name: '虾皮小说',
-  baseUrl: XPXS_URL,
-  search: async (keyword: string): Promise<Novel[]> => {
-    console.log(`[Xpxs] Searching for: ${keyword}喵~`);
-    let results: Novel[] = [];
-    
-    const searchUrl = `${XPXS_URL}/search/?searchkey=${encodeURIComponent(keyword)}`;
-    
-    try {
-      const html = await fetchText(searchUrl);
-      const doc = parseHTML(html);
-      
-      // 虾皮小说的搜索结果通常在 dl 列表中
-      const dls = doc.querySelectorAll('dl');
-      console.log(`[Xpxs] Found ${dls.length} dl elements喵~`);
-
-      dls.forEach(dl => {
-          try {
-              const titleEl = dl.querySelector('dt a');
-              if (!titleEl) return;
-              
-              const title = titleEl.textContent?.trim() || "";
-              let href = titleEl.getAttribute('href') || "";
-              if (href && !href.startsWith('http')) {
-                  href = `${XPXS_URL}${href}`;
-              }
-              
-              const coverEl = dl.querySelector('img');
-              let coverUrl = coverEl?.getAttribute('data-original') || coverEl?.getAttribute('src') || "";
-              if (coverUrl && !coverUrl.startsWith('http')) {
-                  coverUrl = `${XPXS_URL}${coverUrl}`;
-              }
-              if (isPlaceholderCoverUrl(coverUrl)) coverUrl = "";
-              
-              // 第二个 dd 通常是作者信息，包含链接
-              const dds = dl.querySelectorAll('dd');
-              let author = "未知";
-              let description = "";
-              
-              if (dds.length > 0) {
-                  // 第一个 dd 是简介
-                  description = dds[0].textContent?.trim() || "";
-              }
-              
-              if (dds.length > 1) {
-                  // 第二个 dd 包含作者
-                  const authorEl = dds[1].querySelector('a');
-                  if (authorEl) {
-                      author = authorEl.textContent?.trim() || "未知";
-                  } else {
-                      // 尝试从文本提取
-                      const text = dds[1].textContent || "";
-                      // 假设格式为 "作者：xxx" 或直接是作者名
-                      author = text.split(/\s+/)[0] || "未知";
-                  }
-              }
-              
-              if (isRelevant(title, author, keyword)) {
-                  results.push({
-                      id: href,
-                      title,
-                      author,
-                      coverUrl: proxifyImage(coverUrl),
-                      description,
-                      tags: [],
-                      status: 'Unknown',
-                      detailUrl: href,
-                      chapters: [],
-                      sourceName: '虾皮小说'
-                  });
-              }
-          } catch (e) {
-              console.warn(`[Xpxs] Error parsing search result:`, e);
-          }
-      });
-    } catch (e) {
-      console.warn(`[Xpxs] Direct fetch failed: ${e}喵~`);
-    }
-    
-    // Fallback to browser search
-    if (results.length === 0) {
-      try {
-        const browserSearchUrl = `/api/browser-search?site=xpxs&keyword=${encodeURIComponent(keyword)}`;
-        const response = await fetch(browserSearchUrl);
-        const data = await response.json();
-        if (data.success && data.results) {
-          results = data.results.map((item: any) => ({
-            id: item.detailUrl,
-            title: item.title,
-            author: item.author || '未知',
-            coverUrl: item.coverUrl || '',
-            description: item.description || '',
-            tags: [],
-            status: 'Unknown',
-            chapters: [],
-            sourceName: '虾皮小说',
-            detailUrl: item.detailUrl
-          }));
-        }
-      } catch (e) {
-        console.warn("Xpxs browser search fallback failed", e);
-      }
-    }
-    
-    return results;
-  },
-  getDetails: async (novel: Novel): Promise<Novel> => {
-    console.log(`[Xpxs] Getting details for: ${novel.title}喵~`);
-    let html = "";
-    try {
-        html = await fetchText(novel.detailUrl, undefined, 'utf-8');
-        if (html.includes("charset=gb") || html.includes("charset=\"gb") || html.includes('琚')) {
-            html = await fetchText(novel.detailUrl, undefined, 'gb18030');
-        }
-        if (html.length < 500) {
-            throw new Error("Content too short");
-        }
-    } catch (e) {
-        try {
-            const browserDetailsUrl = `/api/browser-details?url=${encodeURIComponent(novel.detailUrl)}`;
-            const response = await fetch(browserDetailsUrl);
-            const data = await response.json();
-            if (data.success && data.html) {
-                html = data.html;
-            } else {
-                throw new Error("Browser fallback failed");
-            }
-        } catch (browserError) {
-            console.error("[Xpxs] Detail fetch failed", browserError);
-            throw new Error("无法获取小说详情喵~");
-        }
-    }
-    const doc = parseHTML(html);
-    
-    // 提取封面
-    const imgEl = doc.querySelector('.book-img img') || doc.querySelector('.cover img') || doc.querySelector('img.lazy');
-    let coverUrl = imgEl?.getAttribute('data-original') || imgEl?.getAttribute('src') || novel.coverUrl;
-    if (coverUrl && !coverUrl.startsWith('http')) {
-        coverUrl = `${XPXS_URL}${coverUrl}`;
-    }
-    if (isPlaceholderCoverUrl(coverUrl)) coverUrl = "";
-    if (coverUrl) coverUrl = proxifyImage(coverUrl);
-    
-    const statusCandidates = Array.from(doc.querySelectorAll('.bookdes p, .bookinfo p, .bookdes span, .bookinfo span'))
-        .map(el => el.textContent?.trim() || '')
-        .filter(Boolean);
-    const statusText = statusCandidates.find(text => text.includes('小说状态'));
-    if (statusText) {
-        const normalized = statusText.replace('小说状态：', '').replace('小说状态:', '').trim();
-        if (normalized.includes('完结')) {
-            novel.status = 'Completed';
-        } else if (normalized.includes('连载')) {
-            novel.status = 'Serializing';
-        }
-    }
-    
-    // 提取简介
-    const introEl = doc.querySelector('.book-intro') || doc.querySelector('.intro') || doc.querySelector('#intro');
-    let description = introEl?.textContent?.trim() || novel.description;
-    
-    // 提取目录链接 (通常是 /index/id/)
-    // 详情页可能有 "目录首页" 链接
-    const indexLink = doc.querySelector('a[rel="index"]') || Array.from(doc.querySelectorAll('a')).find(a => a.textContent?.includes('目录'));
-    let tocUrl = "";
-    if (indexLink) {
-        const href = indexLink.getAttribute('href');
-        if (href) {
-            tocUrl = href.startsWith('http') ? href : `${XPXS_URL}${href}`;
-        }
-    }
-    
-    // 如果没找到目录链接，尝试根据 ID 猜测
-    // 假设 detailUrl 是 /book/123/，tocUrl 可能是 /index/123/
-    if (!tocUrl && novel.detailUrl.includes('/book/')) {
-        tocUrl = novel.detailUrl.replace('/book/', '/index/');
-    }
-    
-    console.log(`[Xpxs] TOC URL: ${tocUrl}喵~`);
-    
-    const chapters: Chapter[] = [];
-    
-    if (tocUrl) {
-        const fetchTocHtml = async (url: string) => {
-            let tocHtml = "";
-            try {
-                tocHtml = await fetchText(url, undefined, 'utf-8');
-                if (tocHtml.includes("charset=gb") || tocHtml.includes("charset=\"gb") || tocHtml.includes('琚')) {
-                    tocHtml = await fetchText(url, undefined, 'gb18030');
-                }
-                if (tocHtml.length < 500) {
-                    throw new Error("Content too short");
-                }
-            } catch (e) {
-                try {
-                    const browserDetailsUrl = `/api/browser-details?url=${encodeURIComponent(url)}`;
-                    const response = await fetch(browserDetailsUrl);
-                    const data = await response.json();
-                    if (data.success && data.html) {
-                        tocHtml = data.html;
-                    }
-                } catch (browserError) {
-                    console.warn(`[Xpxs] Browser TOC fetch failed for ${url}:`, browserError);
-                }
-            }
-            return tocHtml;
-        };
-        const tocHtml = await fetchTocHtml(tocUrl);
-        const tocDoc = parseHTML(tocHtml);
-        
-        // 检查分页
-        const select = tocDoc.querySelector('#indexselect') as HTMLSelectElement;
-        const pageUrls: string[] = [tocUrl];
-        
-        if (select && select.options.length > 1) {
-             console.log(`[Xpxs] Found ${select.options.length} TOC pages喵~`);
-             // 获取所有分页链接
-             for (let i = 0; i < select.options.length; i++) {
-                 const val = select.options[i].value;
-                 if (val) {
-                     const url = val.startsWith('http') ? val : `${XPXS_URL}${val}`;
-                     if (!pageUrls.includes(url)) {
-                         pageUrls.push(url);
-                     }
-                 }
-             }
-        }
-        
-        // 并发获取所有目录页 (限制并发数为 5)
-        const limit = pLimit(5);
-        const fetchTocPage = async (url: string) => {
-             try {
-                 const pageHtml = await fetchTocHtml(url);
-                 const pageDoc = parseHTML(pageHtml);
-                 // 添加 .chapterlist-index li a 选择器喵~
-                 const links = pageDoc.querySelectorAll('.chapterlist dd a, .chapterlist li a, .listmain a, .read_list a, #list dd a, .book-chapter-list a, .chapterlist-index li a');
-                 const pageChapters: Chapter[] = [];
-                 
-                 links.forEach(link => {
-                     const href = link.getAttribute('href');
-                     const title = link.textContent?.trim();
-                     if (href && title) {
-                         const fullUrl = href.startsWith('http') ? href : `${XPXS_URL}${href}`;
-                         pageChapters.push({
-                             number: 0, // 暂时设为0，最后统一编号
-                             title,
-                             url: fullUrl
-                         });
-                     }
-                 });
-                 return pageChapters;
-             } catch (e) {
-                 console.warn(`[Xpxs] Failed to fetch TOC page ${url}:`, e);
-                 return [];
-             }
-        };
-        
-        const allPagesChapters = await Promise.all(pageUrls.map(url => limit(() => fetchTocPage(url))));
-        
-        // 展平并去重
-        const seenUrls = new Set<string>();
-        allPagesChapters.flat().forEach(c => {
-            if (!seenUrls.has(c.url)) {
-                seenUrls.add(c.url);
-                c.number = chapters.length + 1;
-                chapters.push(c);
-            }
-        });
-    }
-    
-    if (chapters.length === 0) {
-         // Fallback: 尝试直接从详情页提取（如果是单页目录）
-         // 同样添加 .chapterlist-index li a 选择器喵~
-         const links = doc.querySelectorAll('.chapterlist dd a, .chapterlist li a, .listmain a, .read_list a, #list dd a, .chapterlist-index li a');
-         links.forEach((link, idx) => {
-             const href = link.getAttribute('href');
-             const title = link.textContent?.trim();
-             if (href && title) {
-                 const fullUrl = href.startsWith('http') ? href : `${XPXS_URL}${href}`;
-                 chapters.push({
-                     number: idx + 1,
-                     title,
-                     url: fullUrl
-                 });
-             }
-         });
-    }
-
-    if (chapters.length === 0) throw new Error("未找到章节列表喵~");
-
-    return {
-        ...novel,
-        coverUrl: proxifyImage(coverUrl),
-        description,
-        chapters,
-        sourceName: '虾皮小说'
-    };
-  },
-getChapterContent: async (chapter: Chapter): Promise<string> => {
-  const fetchChapterHtml = async (url: string) => {
-      let html = "";
-      try {
-          html = await fetchText(url, undefined, 'utf-8');
-          if (html.includes("charset=gb") || html.includes("charset=\"gb") || html.includes('琚')) {
-              html = await fetchText(url, undefined, 'gb18030');
-          }
-          if (html.length < 500) {
-              throw new Error("Content too short");
-          }
-          return html;
-      } catch (e) {
-          try {
-              const browserDetailsUrl = `/api/browser-details?url=${encodeURIComponent(url)}`;
-              const response = await fetch(browserDetailsUrl);
-              const data = await response.json();
-              if (data.success && data.html) {
-                  return data.html;
-              }
-          } catch (browserError) {
-          }
-      }
-      throw new Error("无法获取章节内容喵~");
-  };
-
-  const fetchContentRecursively = async (url: string, visited: Set<string> = new Set()): Promise<string> => {
-      if (visited.has(url)) return "";
-      visited.add(url);
-      
-      console.log(`[Xpxs] Fetching chapter content: ${url}喵~`);
-      const html = await fetchChapterHtml(url);
-      const doc = parseHTML(html);
-      
-      const contentEl = doc.querySelector('#content') || doc.querySelector('.content') || doc.querySelector('#chaptercontent') || doc.querySelector('.read-content');
-      if (!contentEl) throw new Error("未找到章节内容喵~");
-      
-      // 检查下一页
-      const nextLink = Array.from(doc.querySelectorAll('a')).find(a => a.textContent?.includes('下一页'));
-      
-      const tempDiv = document.createElement('div');
-      tempDiv.innerHTML = contentEl.innerHTML;
-      
-      // 加强清理：把脚本、广告、隐藏元素、所有a链接（包括报错链接）都移除掉喵～
-      tempDiv.querySelectorAll('script, style, ins, .ads, .ad, .advertisement, a').forEach(el => el.remove());
-      
-      let text = tempDiv.innerHTML
-          .replace(/<br\s*\/?>/gi, '\n')
-          .replace(/<p[^>]*>/gi, '')
-          .replace(/<\/p>/gi, '\n')
-          .replace(/&nbsp;/g, ' ')
-          .replace(/&lt;/g, '<')
-          .replace(/&gt;/g, '>')
-          .replace(/&amp;/g, '&')
-          .trim();
-      
-      const cleanDiv = document.createElement('div');
-      cleanDiv.innerHTML = text;
-      let cleanText = cleanDiv.textContent || "";
-      
-      // 依然保留之前的正则大块广告移除
-      cleanText = cleanText.replace(/虾皮小说【www\.xpxs\.net】第一时间更新《[^》]+》最新章节。/g, '');
-      cleanText = cleanText.replace(/本章未完，点击下一页继续阅读。/g, '');
-      
-      // 加强噪声关键词过滤
-      const noiseTokens = [
-        '虾皮小说', 'www.xpxs.net', 'xpxs.net', 'https://www.xpxs.net',
-        '第一时间更新', '最新章节', '本章未完', '点击下一页', '继续阅读',
-        '章节报错', '免登录'  // 额外加了这两个，防止残留文字
-      ];
-      
-      const normalizeLine = (line: string) => {
-          let out = line.replace(/\u00a0/g, ' ');
-          noiseTokens.forEach(token => {
-              out = out.split(token).join('');
-          });
-          return out.trim();
-      };
-      
-      cleanText = cleanText
-          .split('\n')
-          .map(normalizeLine)
-          .filter(line => line.length > 0)
-          .join('\n\n');
-      
-      // 兜底提取
-      if (!cleanText || cleanText.trim().length < 20) {
-          const fallbackText = contentEl.textContent || "";
-          const lines = fallbackText
-              .split('\n')
-              .map(normalizeLine)
-              .filter(line => line.length > 0);
-          cleanText = lines.join('\n\n').trim();
-      }
-      if (!cleanText || cleanText.trim().length < 20) {
-          const bodyText = doc.body.textContent || "";
-          const lines = bodyText.split('\n')
-              .map(normalizeLine)
-              .filter(line => line.length > 0);
-          cleanText = lines.join('\n\n').trim();
-      }
-          
-      if (nextLink) {
-          const nextHref = nextLink.getAttribute('href');
-          if (nextHref) {
-              const nextUrl = nextHref.startsWith('http') ? nextHref : `${XPXS_URL}${nextHref}`;
-              if (nextUrl.includes('_') || !nextLink.textContent?.includes('章')) {
-                   const nextContent = await fetchContentRecursively(nextUrl, visited);
-                   return cleanText + "\n\n" + nextContent;
-              }
-          }
-      }
-      
-      return cleanText;
-  };
-  
-  return await fetchContentRecursively(chapter.url);
-}
-};
+// xpxsProvider removed - xpxs.net domain is for sale
+// [DELETED ~400 lines of xpxs provider code]
+const _xpxs_deleted = null;
 
 const aliceswProvider: SourceProvider = {
   key: 'alicesw',
@@ -2727,10 +2037,6 @@ const aliceswProvider: SourceProvider = {
     console.log(`[AliceSw] Searching for: ${keyword}喵~`);
     const results: Novel[] = [];
     
-    // 使用公共代理搜索喵~
-    const publicProxy = (url: string) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`;
-    
-    // 清理书名中的编号前缀
     const cleanTitle = (title: string) => {
       return title
         .replace(/^\d+[\.\、\s《]+/, '')
@@ -2738,15 +2044,12 @@ const aliceswProvider: SourceProvider = {
         .trim();
     };
     
-    // 最多搜索3页
     for (let page = 1; page <= 3; page++) {
       try {
-        // 使用公共代理请求喵~
         const searchUrl = `${ALICESW_URL}/search?q=${encodeURIComponent(keyword)}&f=_all&sort=relevance&p=${page}&serialize=`;
-        const proxyUrl = publicProxy(searchUrl);
-        console.log(`[AliceSw] Fetching page ${page}: ${proxyUrl}喵~`);
+        console.log(`[AliceSw] Fetching page ${page}: ${searchUrl}喵~`);
         
-        const html = await fetchText(proxyUrl);
+        const html = await fetchText(searchUrl);
         
         if (!html || html.length < 200) {
           console.log(`[AliceSw] Page ${page} returned empty result, stopping pagination喵~`);
@@ -2860,7 +2163,6 @@ const aliceswProvider: SourceProvider = {
     const authorEl = doc.querySelector('.novel_info p a[href*="author"]');
     if (authorEl) novel.author = authorEl.textContent?.trim() || novel.author;
     
-    let coverSrc = '';
     const coverSelectors = [
       '.pic img.lazyload_book_cover',
       '.pic img.fengmian2',
@@ -2876,44 +2178,119 @@ const aliceswProvider: SourceProvider = {
       '.content img'
     ];
     
-    let coverImg = null;
+    // 方案五：智能封面评分函数喵~
+    const scoreCoverCandidate = (img: HTMLImageElement): number => {
+      let score = 0;
+      const src = img.getAttribute('src') || img.getAttribute('data-src') || 
+                  img.getAttribute('data-original') || img.getAttribute('data-lazy') || '';
+
+      // 父容器 class 特征加分
+      let parent = img.parentElement;
+      for (let i = 0; i < 4 && parent; i++) {
+        const cls = (parent.className || '').toLowerCase();
+        if (/cover|fengmian|book-?img|novel-?pic|book-?cover/.test(cls)) { score += 10; break; }
+        parent = parent.parentElement;
+      }
+
+      // URL 特征加分
+      const lowerSrc = src.toLowerCase();
+      if (lowerSrc.includes('cover')) score += 8;
+      if (lowerSrc.includes('fengmian')) score += 8;
+      if (lowerSrc.includes('/uploads/')) score += 5;
+      if (/\.(jpg|jpeg|png|webp)/i.test(lowerSrc)) score += 4;
+
+      // 尺寸启发式加分
+      const w = parseInt(img.getAttribute('width') || '0');
+      const h = parseInt(img.getAttribute('height') || '0');
+      if (w > 100 && h > 150) score += 6;
+
+      // 减分项
+      if (lowerSrc.includes('icon') || lowerSrc.includes('logo')) score -= 20;
+      if (w > 0 && h > 0 && (w < 50 || h < 50)) score -= 15;
+
+      return score;
+    };
+
+    // 方案二：放宽的 URL 过滤器（排除法，替代白名单）
+    const isValidCoverUrl = (url: string): boolean => {
+      if (!url || url.length < 10) return false;
+      const lower = url.toLowerCase();
+      // 排除明显非封面的 URL
+      const exclusions = ['icon', 'logo', 'avatar', 'banner', 'ad.', 'favicon', 'qr-code', '/static/js/', 'pixel', 'tracking'];
+      if (exclusions.some(e => lower.includes(e))) return false;
+      // 接受：HTTP/HTTPS、相对路径、data:image
+      return url.startsWith('http') || url.startsWith('/') || url.startsWith('data:image');
+    };
+
+    // 从 img 元素提取候选 URL 列表
+    const extractUrls = (img: HTMLImageElement): string[] => {
+      return [
+        img.getAttribute('data-src') || '',
+        img.getAttribute('data-original') || '',
+        img.getAttribute('data-lazy') || '',
+        img.getAttribute('src') || ''
+      ].filter(u => u.length > 0);
+    };
+
+    let coverImg: Element | null = null;
+    let coverSrc = '';
+
+    // 第一层：固定 CSS 选择器
     for (const selector of coverSelectors) {
-      coverImg = doc.querySelector(selector);
-      if (coverImg) {
-        console.log(`[AliceSw] Found cover with selector: ${selector}喵~`);
-        break;
+      const img = doc.querySelector(selector) as HTMLImageElement | null;
+      if (img) {
+        const urls = extractUrls(img);
+        const valid = urls.find(isValidCoverUrl);
+        if (valid) {
+          coverImg = img;
+          coverSrc = valid;
+          console.log(`[AliceSw] Found cover with selector: ${selector} -> ${coverSrc}喵~`);
+          break;
+        }
+        // 选择器命中但 URL 无效，继续尝试下一个
+        coverImg = null;
       }
     }
-    
+
+    // 第二层：meta 标签兜底（方案二）
+    if (!coverSrc && !coverImg) {
+      const ogImage = doc.querySelector('meta[property="og:image"]')?.getAttribute('content') || '';
+      const twitterImage = doc.querySelector('meta[name="twitter:image"]')?.getAttribute('content') || '';
+      const metaUrl = [ogImage, twitterImage].find(isValidCoverUrl);
+      if (metaUrl) {
+        coverSrc = metaUrl;
+        console.log(`[AliceSw] Found cover via meta tag: ${coverSrc}喵~`);
+      }
+    }
+
+    // 第三层：智能评分兜底（方案五）
+    if (!coverSrc && !coverImg) {
+      const allImgs = Array.from(doc.querySelectorAll('img'));
+      const scored = allImgs
+        .map(img => {
+          const urls = extractUrls(img);
+          const valid = urls.find(isValidCoverUrl);
+          if (!valid) return null;
+          return { img, url: valid, score: scoreCoverCandidate(img) };
+        })
+        .filter((c): c is { img: HTMLImageElement; url: string; score: number } => c !== null && c.score > 0)
+        .sort((a, b) => b.score - a.score);
+
+      if (scored.length > 0) {
+        coverSrc = scored[0].url;
+        coverImg = scored[0].img;
+        console.log(`[AliceSw] Found cover via smart scoring: ${coverSrc} (score: ${scored[0].score})喵~`);
+      }
+    }
+
     console.log(`[AliceSw] Cover img found: ${coverImg !== null}喵~`);
-    
-    if (coverImg) {
-      const dataSrc = coverImg.getAttribute('data-src') || '';
-      const dataOriginal = coverImg.getAttribute('data-original') || '';
-      const dataLazy = coverImg.getAttribute('data-lazy') || '';
-      const srcAttr = coverImg.getAttribute('src') || '';
-      console.log(`[AliceSw] data-src: ${dataSrc}, data-original: ${dataOriginal}, data-lazy: ${dataLazy}, src: ${srcAttr}喵~`);
-      
-      const possibleCovers = [dataSrc, dataOriginal, dataLazy, srcAttr].filter(url => {
-        if (!url || url.length < 10) return false;
-        const lower = url.toLowerCase();
-        return lower.includes('/uploads/') || 
-               lower.includes('321cdn.com') || 
-               lower.includes('alicdn.com') ||
-               lower.includes('cover') ||
-               lower.includes('fengmian') ||
-               lower.includes('book') ||
-               (lower.includes('http') && (lower.includes('jpg') || lower.includes('jpeg') || lower.includes('png') || lower.includes('webp')));
-      });
-      
-      if (possibleCovers.length > 0) {
-        coverSrc = possibleCovers[0];
-        console.log(`[AliceSw] Selected cover: ${coverSrc}喵~`);
-      }
+    if (!coverSrc) {
+      console.log(`[AliceSw] All cover sources empty or invalid喵~`);
     }
     
+    // 最终降级：默认占位图
     if (coverSrc) {
-      if (!coverSrc.startsWith('http')) {
+      if (!coverSrc.startsWith('http') && !coverSrc.startsWith('data:')) {
         coverSrc = 'https://www.alicesw.com' + (coverSrc.startsWith('/') ? coverSrc : '/' + coverSrc);
       }
       novel.coverUrl = proxifyImage(coverSrc);
@@ -3181,17 +2558,16 @@ const aliceswProvider: SourceProvider = {
   }
 };
 
-export const PROVIDERS: SourceProvider[] = [wanbengeProvider, yedujiProvider, shukugeProvider, dingdianProvider, xpxsProvider, aliceswProvider, localProvider];
+export const PROVIDERS: SourceProvider[] = [wanbengeProvider, shukugeProvider, dingdianProvider, bqguiProvider, aliceswProvider, localProvider];
 
-// 书源启用/禁用配置喵~ (所有书源均已启用，使用浏览器直接访问)
+// 书源启用/禁用配置喵~ (所有书源均已启用)
 export const SOURCE_ENABLED_CONFIG: Record<string, boolean> = {
-  '完本阁': true,        // 浏览器直接访问
-  '夜读集': true,        // 浏览器直接访问
-  '书库阁': true,        // ✅ 正常工作
-  '顶点小说网': true,     // ✅ 正常工作
-  '虾皮小说': true,      // ✅ 正常工作
-  '爱丽丝书屋': true,    // 浏览器直接访问
-  '本地书库': true       // ✅ 正常工作
+  '完本阁': true,
+  '书库阁': true,
+  '顶点小说网': true,
+  '笔趣阁(GUI)': true,
+  '爱丽丝书屋': true,
+  '本地书库': true
 };
 
 // 设置书源启用状态喵~
@@ -3209,10 +2585,9 @@ export const loadSourceConfig = (): Record<string, boolean> => {
   // 确保默认所有书源都是启用的
   const defaultConfig: Record<string, boolean> = {
     '完本阁': true,
-    '夜读集': true,
     '书库阁': true,
     '顶点小说网': true,
-    '虾皮小说': true,
+    '笔趣阁(GUI)': true,
     '爱丽丝书屋': true,
     '本地书库': true
   };
@@ -3241,76 +2616,6 @@ export const searchNovel = async (keyword: string, source: any = 'auto', respect
   // Check if keyword is a URL
   if (isUrl(keyword)) {
       console.log(`[Search] Detected URL: ${keyword}喵~`);
-
-      // 1. 夜读集 (Yeduji) URL 直达支持喵~
-      if (keyword.includes('yeduji.com')) {
-          try {
-              console.log(`[Search] Direct parsing Yeduji URL: ${keyword}喵~`);
-              const html = await fetchText(keyword);
-              const doc = parseHTML(html);
-              
-              // 提取标题：优先 h1，其次从 title 标签提取
-              let title = doc.querySelector('h1')?.textContent?.trim();
-              if (!title) {
-                  const pageTitle = doc.querySelector('title')?.textContent || "";
-                  // 格式通常是 "书名 - 作者 - 夜读集"
-                  const parts = pageTitle.split(' - ');
-                  if (parts.length > 0) title = parts[0];
-              }
-              title = title || "未知标题";
-              
-              // 提取作者
-              const authorLabel = Array.from(doc.querySelectorAll('main span, main div, .info span')).find(el => el.textContent?.includes('作者'));
-              let author = "未知";
-              if (authorLabel) {
-                  const text = authorLabel.textContent || "";
-                  if (text.includes(':')) {
-                      author = text.split(':')[1].trim();
-                  } else {
-                      author = authorLabel.nextElementSibling?.textContent?.trim() || author;
-                  }
-              }
-
-              // 提取简介
-              const descEl = doc.querySelector('.desc') || doc.querySelector('main p') || doc.querySelector('.intro');
-              const description = descEl?.textContent?.trim() || "";
-
-              // 提取封面
-              const coverImg = doc.querySelector('main img') || doc.querySelector('.cover img') || doc.querySelector('img[src*="cover"]');
-              let coverUrl = coverImg?.getAttribute('src') || coverImg?.getAttribute('data-src') || "";
-              if (coverUrl && !coverUrl.startsWith('http')) {
-                  coverUrl = `${YEDUJI_URL}${coverUrl.startsWith('/') ? '' : '/'}${coverUrl}`;
-              }
-
-              // 提取标签喵~
-              const tags: string[] = [];
-              const tagDt = Array.from(doc.querySelectorAll('dl dt')).find(dt => dt.textContent?.includes('标签'));
-              if (tagDt) {
-                  const dd = tagDt.nextElementSibling;
-                  if (dd) {
-                      dd.querySelectorAll('a').forEach(a => {
-                          if (a.textContent) tags.push(a.textContent.trim());
-                      });
-                  }
-              }
-
-              return [{
-                  id: keyword,
-                  title,
-                  author,
-                  description,
-                  coverUrl: proxifyImage(coverUrl),
-                  tags: tags,
-                  status: 'Unknown',
-                  detailUrl: keyword,
-                  chapters: [], // 详情页获取时会填充
-                  sourceName: '夜读集'
-              }];
-
-          } catch (e) {
-              console.error(`[Search] Failed to parse Yeduji URL:`, e);
-          }
-      }
       
       // 可以在这里扩展其他站点的 URL 支持喵~
   }
@@ -3429,10 +2734,9 @@ export const searchNovel = async (keyword: string, source: any = 'auto', respect
 const getProviderByName = (name: string): SourceProvider | undefined => {
   if (name.includes('本地书库')) return localProvider;
   if (name.includes('完本阁')) return wanbengeProvider;
-  if (name.includes('夜读集')) return yedujiProvider;
   if (name.includes('书库阁')) return shukugeProvider;
   if (name.includes('顶点小说网')) return dingdianProvider;
-  if (name.includes('虾皮小说')) return xpxsProvider;
+  if (name.includes('笔趣阁')) return bqguiProvider;
   if (name.includes('爱丽丝')) return aliceswProvider;
   return undefined;
 };
@@ -3496,8 +2800,8 @@ export const downloadAndParseNovel = async (novel: Novel, onProgress: (msg: stri
     const isWanbenge = name.includes('完本阁');
     const isBqgui = name.includes('笔趣阁') || name.includes('bqgui');
     
-    // 完本阁维持 2，笔趣阁提升到 15，其他源提升到 5 喵~
-    const concurrency = isWanbenge ? 2 : (isBqgui ? 15 : 5);
+    // 完本阁维持 2，笔趣阁提升到 20，其他源提升到 10 喵~
+    const concurrency = isWanbenge ? 2 : (isBqgui ? 20 : 10);
     console.log(`[Download] Starting download with concurrency: ${concurrency} for ${name}喵~`);
     
     const limit = pLimit(concurrency); 
@@ -3509,7 +2813,7 @@ export const downloadAndParseNovel = async (novel: Novel, onProgress: (msg: stri
       
       // 在下载前随机休息一下，假装是真人在翻页喵~
       if (isWanbenge) {
-        const jitter = Math.random() * 1000 + 500; // 0.5s - 1.5s
+        const jitter = Math.random() * 800 + 300; // 0.3s - 1.1s
         await new Promise(resolve => setTimeout(resolve, jitter));
       }
 
@@ -3518,9 +2822,13 @@ export const downloadAndParseNovel = async (novel: Novel, onProgress: (msg: stri
           // Find the provider that can handle this chapter's URL
           let provider = PROVIDERS.find(p => {
             // Check by URL matching
-            const urlMatch = (p.baseUrl && chapter.url?.includes(new URL(p.baseUrl).hostname)) || 
-                             (p.name === '完本阁' && chapter.url?.includes('jizai22.com'));
-            return urlMatch;
+            try {
+              const urlMatch = (p.baseUrl && chapter.url?.includes(new URL(p.baseUrl).hostname)) || 
+                               (p.name === '完本阁' && chapter.url?.includes('jizai22.com'));
+              return urlMatch;
+            } catch {
+              return false;
+            }
           });
           
           // Fallback: use the provider matching the sourceName
@@ -3537,7 +2845,7 @@ export const downloadAndParseNovel = async (novel: Novel, onProgress: (msg: stri
           }
 
           throw new Error(`No provider found for chapter URL: ${chapter.url}`);
-        }, 3, 3000, `Chapter ${chapter.title}`);
+        }, 2, 2000, `Chapter ${chapter.title}`);
 
       } catch (e) {
         console.warn(`Failed to fetch chapter ${chapter.title}`, e);
@@ -3571,3 +2879,122 @@ export const downloadAndParseNovel = async (novel: Novel, onProgress: (msg: stri
     throw new Error("无法下载：该小说不支持自动抓取");
   }
 };
+
+// ==================== SmartSelector 增强搜索 ====================
+
+/**
+ * 使用 SmartSelector 进行自适应搜索（Scrapling 风格）
+ * 当传统选择器失效时自动 fallback 到相似度匹配
+ */
+export async function smartSearchNovel(
+  keyword: string,
+  sourceKey: SourceKey,
+  searchUrl: string,
+  containerSelector: string,
+  itemSelectors: {
+    title: { css?: string; xpath?: string; text?: string };
+    author: { css?: string; xpath?: string; text?: string };
+    cover: { css?: string; attribute?: string };
+    detailUrl: { css?: string; attribute?: string };
+  }
+): Promise<Novel[]> {
+  try {
+    const config = selectorRegistry.get(sourceKey);
+    const searchConfig = config?.search;
+
+    const proxyUrl = `/proxy/${sourceKey}/search.html?keyword=${encodeURIComponent(keyword)}`;
+    const response = await fetch(proxyUrl);
+
+    if (!response.ok) return [];
+
+    const html = await response.text();
+    const selector = new SmartSelector(html);
+    const doc = selector.document;
+
+    const containers = doc.querySelectorAll(containerSelector);
+    if (containers.length === 0) return [];
+
+    const novels: Novel[] = [];
+
+    containers.forEach((container) => {
+      const containerHtml = container.outerHTML;
+      const itemSelector = new SmartSelector(containerHtml);
+
+      const titleResult = searchConfig
+        ? itemSelector.extract(searchConfig.title)
+        : { value: itemSelector.css(itemSelectors.title.css || 'a', 'textContent'), confidence: 0.5 };
+
+      const authorResult = searchConfig
+        ? itemSelector.extract(searchConfig.author)
+        : { value: itemSelector.css(itemSelectors.author.css || '.author', 'textContent'), confidence: 0.5 };
+
+      const title = typeof titleResult.value === 'string' ? titleResult.value : '';
+      const author = typeof authorResult.value === 'string' ? authorResult.value : '未知';
+
+      if (!title.trim()) return;
+
+      let detailUrl = '';
+      if (itemSelectors.detailUrl.css) {
+        const linkEl = container.querySelector(itemSelectors.detailUrl.css);
+        const href = linkEl?.getAttribute(itemSelectors.detailUrl.attribute || 'href') || '';
+        detailUrl = href.startsWith('http') ? href : `${config?.baseUrl || ''}${href}`;
+      }
+
+      let coverUrl = '';
+      if (itemSelectors.cover.css) {
+        const imgEl = container.querySelector(itemSelectors.cover.css);
+        coverUrl = imgEl?.getAttribute(itemSelectors.cover.attribute || 'src') || '';
+      }
+
+      novels.push({
+        id: detailUrl || title,
+        title,
+        author,
+        description: '',
+        coverUrl,
+        tags: [],
+        status: 'Unknown',
+        detailUrl,
+        chapters: [],
+        sourceName: config?.sourceKey || sourceKey,
+      });
+    });
+
+    return novels;
+  } catch (err) {
+    console.error('[SmartSearch] Error:', err);
+    return [];
+  }
+}
+
+/**
+ * 使用 SmartSelector + ElementTracker 在服务端提取章节正文
+ */
+export async function smartFetchChapter(
+  chapterUrl: string,
+  sourceKey: SourceKey
+): Promise<string | null> {
+  try {
+    const config = selectorRegistry.get(sourceKey);
+    if (!config) return null;
+
+    const response = await fetch('/api/scraper/extract', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        url: chapterUrl,
+        selectors: [config.content.body],
+      }),
+    });
+
+    const data = await response.json();
+    if (data.success && data.results?.[0]?.value) {
+      return data.results[0].value;
+    }
+
+    return null;
+  } catch (err) {
+    console.error('[SmartFetch] Error:', err);
+    return null;
+  }
+}

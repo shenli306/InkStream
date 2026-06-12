@@ -34,17 +34,17 @@ export const BookCard: React.FC<BookCardProps> = ({ novel, onSelect }) => {
 
   return (
     <div
-      className="glass-panel rounded-3xl overflow-hidden cursor-pointer transition-all duration-500 group flex flex-col h-full relative"
+      className="glass-panel rounded-3xl overflow-hidden cursor-pointer group flex flex-col h-full relative card-hover gpu-accelerated"
       onClick={() => onSelect(novel)}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
       style={{
-        transform: isHovered ? 'translateY(-4px)' : 'translateY(0)',
+        transform: isHovered ? 'translateY(-4px) scale(1.01)' : 'translateY(0) scale(1)',
         boxShadow: isHovered ? '0 20px 40px -12px rgba(0,0,0,0.4), 0 0 40px -10px rgba(255,158,206,0.3)' : '0 0 0 1px rgba(255,255,255,0.05)',
       }}
     >
       {/* Animated Gradient Background */}
-      <div className="absolute top-0 left-0 w-full h-40 bg-gradient-to-b from-pink-500/20 via-pink-500/10 to-transparent opacity-50 group-hover:opacity-80 transition-opacity duration-500" />
+      <div className="absolute top-0 left-0 w-full h-40 bg-gradient-to-b from-pink-500/20 via-pink-500/10 to-transparent opacity-50 group-hover:opacity-80" style={{ transition: 'opacity 400ms cubic-bezier(0.4,0,0.2,1)' }} />
       
       {/* Status Badge */}
       <div className="absolute top-3 right-3 z-10">
@@ -74,7 +74,7 @@ export const BookCard: React.FC<BookCardProps> = ({ novel, onSelect }) => {
           </div>
           
           <div className="flex-1 min-w-0">
-            <h3 className="text-lg font-bold text-white mb-1 line-clamp-2 font-serif leading-tight group-hover:text-pink-200 transition-colors">
+            <h3 className="text-lg font-bold text-white mb-1 line-clamp-2 font-serif leading-tight group-hover:text-pink-200" style={{ transition: 'color 300ms cubic-bezier(0.4,0,0.2,1)' }}>
               {novel.title}
             </h3>
             <p className="text-sm text-pink-300 mb-2 truncate">{novel.author}</p>
@@ -106,7 +106,7 @@ export const BookCard: React.FC<BookCardProps> = ({ novel, onSelect }) => {
 
         {/* Description with expand */}
         <div className="relative flex-1 mb-4">
-          <p className={`text-white/50 text-xs leading-relaxed ${isExpanded ? '' : 'line-clamp-2'} transition-all duration-300`}>
+          <p className={`text-white/50 text-xs leading-relaxed ${isExpanded ? '' : 'line-clamp-2'}`} style={{ transition: 'max-height 300ms cubic-bezier(0.4,0,0.2,1)' }}>
             {novel.description || "暂无简介"}
           </p>
           {novel.description && novel.description.length > 80 && (
@@ -126,11 +126,12 @@ export const BookCard: React.FC<BookCardProps> = ({ novel, onSelect }) => {
             <span>{novel.sourceName?.split(' | ')[0] || '奇书网'}</span>
           </div>
           <button 
-            className={`w-9 h-9 rounded-xl flex items-center justify-center transition-all duration-300 ${
+            className={`w-9 h-9 rounded-xl flex items-center justify-center gpu-accelerated ${
               isHovered 
                 ? 'bg-gradient-to-r from-indigo-500 to-purple-500 text-white shadow-lg shadow-indigo-500/30 scale-110' 
                 : 'bg-indigo-500/50 text-white/70'
             }`}
+            style={{ transition: 'transform 250ms cubic-bezier(0.34,1.56,0.64,1), background-color 300ms cubic-bezier(0.4,0,0.2,1), box-shadow 300ms cubic-bezier(0.4,0,0.2,1), color 250ms cubic-bezier(0.4,0,0.2,1)' }}
             onClick={(e) => { e.stopPropagation(); onSelect(novel); }}
           >
             <Download size={16} />

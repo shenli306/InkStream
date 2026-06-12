@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { Search, Download, ArrowRight, Loader2, Globe, FileText, CheckCircle2, AlertCircle, ChevronLeft, Play, X, Video, Image as ImageIcon, Folder, ChevronRight, Maximize2, Book, BookOpen, Music as LucideMusic } from 'lucide-react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import { Search, Download, ArrowRight, Loader2, Globe, FileText, CheckCircle2, AlertCircle, ChevronLeft, Play, X, Video, Image as ImageIcon, Folder, ChevronRight, Maximize2, Book, BookOpen, Music as LucideMusic, ArrowUp } from 'lucide-react';
 import { Novel, AppState } from './types';
 import { searchNovel, getNovelDetails, downloadAndParseNovel, fetchBlob } from './services/source';
 import { generateEpub } from './services/epub';
@@ -223,6 +223,20 @@ export default function App() {
 
   // Reader State
   const [readingChapterIndex, setReadingChapterIndex] = useState<number | null>(null);
+
+  // Scroll-to-top state
+  const [showScrollTop, setShowScrollTop] = useState(false);
+  useEffect(() => {
+    const handleScroll = () => {
+      setShowScrollTop(window.scrollY > 400);
+    };
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
+
+  const scrollToTop = useCallback(() => {
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }, []);
 
   // 处理界面切换
   const handleViewSwitch = (view: 'novel' | 'music' | 'manga') => {
@@ -488,7 +502,7 @@ export default function App() {
         ) : (
           <>
             {/* Header */}
-            <div className={`text-center transition-all duration-500 ${state !== AppState.IDLE ? 'scale-75 opacity-50 mb-4' : isMobile ? 'mb-8' : 'mb-12'}`}>
+            <div className={`text-center ${state !== AppState.IDLE ? 'scale-75 opacity-50 mb-4' : isMobile ? 'mb-8' : 'mb-12'}`} style={{ transition: 'transform 400ms cubic-bezier(0.4,0,0.2,1), opacity 400ms cubic-bezier(0.4,0,0.2,1)' }}>
               <h1 className={`font-black tracking-tighter text-transparent bg-clip-text bg-gradient-to-b from-white via-white to-white/40 drop-shadow-2xl mb-4 ${isMobile ? 'text-4xl sm:text-5xl' : 'text-6xl md:text-8xl'}`}>
                 InkStream
               </h1>
@@ -503,10 +517,11 @@ export default function App() {
                 <form onSubmit={handleSearch} className="w-full relative group">
                   <div className="search-box-glow group-hover:opacity-40 transition-opacity duration-500"></div>
                   <div 
-                    className="search-box p-2 flex items-center transition-all duration-300 focus-within:ring-2 focus-within:ring-white/20 focus-within:bg-black/40"
+                    className="search-box p-2 flex items-center focus-within:ring-2 focus-within:ring-white/20 focus-within:bg-black/40 gpu-accelerated"
                     style={{ 
                       transform: `scale(${searchBoxTransform.scale})`,
                       opacity: searchBoxTransform.opacity,
+                      transition: 'transform 300ms cubic-bezier(0.4,0,0.2,1), opacity 300ms cubic-bezier(0.4,0,0.2,1), border-radius 300ms cubic-bezier(0.4,0,0.2,1)',
                     }}
                   >
                     <Search className={isMobile ? "ml-3 text-white/40" : "ml-5 text-white/40"} size={isMobile ? 20 : 24} />
@@ -523,7 +538,8 @@ export default function App() {
                     <button
                       type="submit"
                       disabled={state === AppState.SEARCHING}
-                      className={`bg-white text-black ${isMobile ? 'px-6 py-2' : 'px-8 py-3'} rounded-[1.5rem] font-bold hover:scale-105 active:scale-95 focus-visible:ring-2 focus-visible:ring-white/50 transition-all disabled:opacity-50 disabled:scale-100`}
+                      className={`bg-white text-black ${isMobile ? 'px-6 py-2' : 'px-8 py-3'} rounded-[1.5rem] font-bold hover:scale-105 active:scale-95 focus-visible:ring-2 focus-visible:ring-white/50 disabled:opacity-50 disabled:scale-100 gpu-accelerated`}
+                      style={{ transition: 'transform 150ms cubic-bezier(0.4,0,0.2,1), opacity 250ms cubic-bezier(0.4,0,0.2,1)' }}
                     >
                       {state === AppState.SEARCHING ? <Loader2 className="animate-spin" size={isMobile ? 16 : 20} /> : <ArrowRight size={isMobile ? 16 : 20} />}
                     </button>
@@ -562,7 +578,7 @@ export default function App() {
 
             {/* Selected Novel Detail View */}
             {selectedNovel && (state === AppState.PREVIEW || state === AppState.ANALYZING || state === AppState.DOWNLOADING || state === AppState.PARSING || state === AppState.PACKING || state === AppState.COMPLETE) && (
-              <div className="w-full mt-4 animate-in slide-in-from-bottom-10 fade-in duration-500 mb-20">
+              <div className="w-full mt-4 mb-20 animate-enter-slide-up gpu-accelerated" style={{ willChange: 'transform, opacity' }}>
                 <div className="glass-panel p-8 md:p-12 border border-white/10 relative overflow-hidden">
 
               {/* Detail Layout */}
@@ -688,7 +704,7 @@ export default function App() {
 
         {/* Search Results List (Grid) */}
         {!selectedNovel && searchResults.length > 0 && (
-          <div className={`w-full grid ${isMobile ? 'grid-cols-1' : 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3'} gap-6 animate-in fade-in slide-in-from-bottom-5`}>
+          <div className={`w-full grid ${isMobile ? 'grid-cols-1' : 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3'} gap-6 animate-enter-slide-up`}>
             {searchResults.map((item, idx) => (
               <BookCard key={`${item.id}-${idx}-${item.sourceName}`} novel={item} onSelect={handleSelectNovel} />
             ))}
@@ -713,7 +729,7 @@ export default function App() {
 
         {/* Video Results List (Grid)喵~ */}
         {!selectedNovel && showVideos && videoResults.length > 0 && (
-          <div className="w-full space-y-12 animate-in fade-in slide-in-from-bottom-5">
+          <div className="w-full space-y-12 animate-enter-fade">
             {/* 排序和统计工具栏喵~ */}
             <div className="flex flex-col md:flex-row items-center justify-between gap-4 bg-white/5 backdrop-blur-md p-6 rounded-3xl border border-white/10">
               <div className="flex items-center gap-4">
@@ -903,6 +919,20 @@ export default function App() {
 
       </main>
 
+      {/* 回到顶部按钮 */}
+      {showScrollTop && (
+        <button
+          onClick={scrollToTop}
+          className="fixed z-40 bottom-8 right-8 p-4 bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 text-white rounded-full shadow-2xl shadow-purple-500/40 hover:shadow-purple-500/60 transition-all duration-300 hover:scale-110 active:scale-95 gpu-accelerated animate-scale-in"
+          aria-label="回到顶部"
+          style={{
+            willChange: 'transform, opacity',
+            transform: 'translateZ(0)',
+          }}
+        >
+          <ArrowUp size={20} />
+        </button>
+      )}
 
     </div>
   );

@@ -65,6 +65,9 @@
         border: 1px solid rgba(255, 255, 255, 0.12);
         box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37), 0 0 30px rgba(255, 158, 206, 0.3);
         border-radius: 3rem;
+        will-change: transform;
+        transform: translateZ(0);
+        contain: layout style;
       }
 
       /* Dynamic Island specific style */
@@ -78,6 +81,8 @@
         box-shadow: 0 8px 40px -12px rgba(0, 0, 0, 0.5), 0 0 30px rgba(255, 158, 206, 0.3);
         border-radius: 2.5rem;
         transform-origin: center;
+        will-change: transform;
+        transform: translateZ(0);
       }
 
       /* Marquee animation for scrolling text */
@@ -123,6 +128,8 @@
         -webkit-backdrop-filter: blur(14px) saturate(160%);
         border-radius: 2rem;
         box-shadow: 0 0 20px rgba(255, 158, 206, 0.3);
+        will-change: transform;
+        transform: translateZ(0);
       }
 
       /* Search box specific style */
@@ -136,6 +143,8 @@
         border-radius: 2rem !important;
         box-shadow: 0 0 30px rgba(255, 158, 206, 0.25);
         transition: all 0.3s ease;
+        will-change: transform;
+        transform: translateZ(0);
       }
       
       .search-box:focus-within,
@@ -196,21 +205,29 @@
         .glass-panel {
           border-radius: 3rem !important;
           box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37), 0 0 30px rgba(255, 158, 206, 0.3) !important;
+          backdrop-filter: blur(12px) saturate(150%);
+          -webkit-backdrop-filter: blur(12px) saturate(150%);
         }
         
         .glass-input {
           border-radius: 2rem !important;
           box-shadow: 0 0 30px rgba(255, 158, 206, 0.3) !important;
+          backdrop-filter: blur(10px) saturate(140%);
+          -webkit-backdrop-filter: blur(10px) saturate(140%);
         }
         
         .glass-island {
           border-radius: 2.5rem !important;
           box-shadow: 0 8px 40px -12px rgba(0, 0, 0, 0.5), 0 0 30px rgba(255, 158, 206, 0.3) !important;
+          backdrop-filter: blur(12px) saturate(150%);
+          -webkit-backdrop-filter: blur(12px) saturate(150%);
         }
         
         .search-box {
           border-radius: 2rem !important;
           box-shadow: 0 0 30px rgba(255, 158, 206, 0.3) !important;
+          backdrop-filter: blur(10px) saturate(140%);
+          -webkit-backdrop-filter: blur(10px) saturate(140%);
         }
         
         .search-box-glow {
@@ -221,7 +238,7 @@
       /* 蓝粉渐变按钮样式 */
       .btn-gradient {
         background: var(--gradient-main);
-        transition: all 0.3s ease;
+        transition: transform 200ms cubic-bezier(0.4,0,0.2,1), background 300ms cubic-bezier(0.4,0,0.2,1), box-shadow 300ms cubic-bezier(0.4,0,0.2,1);
         box-shadow: 0 4px 15px rgba(255, 158, 206, 0.4);
       }
       .btn-gradient:hover {
@@ -310,6 +327,8 @@
         mix-blend-mode: screen;
         opacity: 0.95;
         overflow: hidden;
+        will-change: transform;
+        transform: translateZ(0);
       }
 
       .light-pillar::before {
@@ -320,6 +339,7 @@
         filter: blur(88px);
         transform: rotate(25deg) translateX(-10%);
         animation: pillar-rotate 35s linear infinite;
+        will-change: transform;
       }
 
       .light-pillar::after {
@@ -488,10 +508,14 @@
       /* Smooth spring animations */
       .transition-spring {
         transition: all 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+        will-change: transform;
+        transform: translateZ(0);
       }
       
       .transition-smooth {
         transition: all 0.4s cubic-bezier(0.4, 0.0, 0.2, 1);
+        will-change: transform;
+        transform: translateZ(0);
       }
 
       /* Icon appear animation */
@@ -514,7 +538,6 @@
       }
     </style>
 
-<link rel="stylesheet" href="/index.css">
   <script type="importmap">
 {
   "imports": {
@@ -527,7 +550,8 @@
   }
 }
 </script>
-  <script type="module" crossorigin src="/assets/index-ChFbdNMh.js"></script>
+  <script type="module" crossorigin src="/assets/index-DeXK_AG8.js"></script>
+  <link rel="stylesheet" crossorigin href="/assets/index-BkbOAjoE.css">
 </head>
   <body class="antialiased selection:bg-indigo-500 selection:text-white">
     <div id="root"></div>

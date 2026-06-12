@@ -22,13 +22,13 @@ export const CuteProgress: React.FC<CuteProgressProps> = ({ state, progress, mes
         <div className="w-full bg-black/40 backdrop-blur-md py-6 px-8 rounded-3xl flex flex-col items-center justify-center border border-white/10 shadow-2xl overflow-hidden relative group">
 
             {/* Dynamic Background Glow */}
-            <div className={`absolute inset-0 opacity-20 transition-colors duration-300 bg-gradient-to-r ${state === AppState.DOWNLOADING ? 'from-emerald-500/0 via-emerald-500 to-emerald-500/0' :
+            <div className={`absolute inset-0 opacity-20 bg-gradient-to-r ${state === AppState.DOWNLOADING ? 'from-emerald-500/0 via-emerald-500 to-emerald-500/0' :
                     state === AppState.PACKING ? 'from-pink-500/0 via-pink-500 to-pink-500/0' :
                         'from-indigo-500/0 via-indigo-500 to-indigo-500/0'
-                } translate-x-[-100%] group-hover:translate-x-[100%] animate-[shimmer_2s_infinite]`}></div>
+                } translate-x-[-100%] group-hover:translate-x-[100%] animate-[shimmer_2s_infinite]`} style={{ transition: 'background-image 400ms cubic-bezier(0.4,0,0.2,1)' }}></div>
 
             {/* Anime Girl GIF 喵~ */}
-            <div className="relative w-48 h-48 mb-2 transition-transform duration-300 hover:scale-110">
+            <div className="relative w-48 h-48 mb-2 hover:scale-110 gpu-accelerated" style={{ transition: 'transform 300ms cubic-bezier(0.34,1.56,0.64,1)' }}>
                 <img 
                     src="/loading-girl.gif" 
                     alt="Loading..." 

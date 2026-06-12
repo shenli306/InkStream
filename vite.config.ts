@@ -21,17 +21,6 @@ export default defineConfig(({ mode }) => {
             'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Mobile/15E148 Safari/604.1'
           }
         },
-        '/proxy/yeduji': {
-          target: 'https://www.yeduji.com',
-          changeOrigin: true,
-          secure: false,
-          rewrite: (path) => path.replace(/^\/proxy\/yeduji/, ''),
-          headers: {
-            'Referer': 'https://www.yeduji.com/',
-            'Origin': 'https://www.yeduji.com',
-            'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Mobile/15E148 Safari/604.1'
-          }
-        },
         '/proxy/shukuge': {
           target: 'http://www.shukuge.com',
           changeOrigin: true,
@@ -65,17 +54,7 @@ export default defineConfig(({ mode }) => {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
           }
         },
-        '/proxy/xpxs': {
-          target: 'https://www.xpxs.net',
-          changeOrigin: true,
-          secure: false,
-          rewrite: (path) => path.replace(/^\/proxy\/xpxs/, ''),
-          headers: {
-            'Referer': 'https://www.xpxs.net/',
-            'Origin': 'https://www.xpxs.net',
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-          }
-        }
+        // xpxs proxy removed - domain is for sale
       }
     },
     plugins: [
@@ -864,10 +843,6 @@ export default defineConfig(({ mode }) => {
                   targetUrl = `http://www.shukuge.com/${path}${search}`;
                 } else if (site === 'alicesw') {
                   targetUrl = `https://www.alicesw.com/${path}${search}`;
-                } else if (site === 'xpxs') {
-                  targetUrl = `https://www.xpxs.net/${path}${search}`;
-                } else if (site === 'yeduji') {
-                  targetUrl = `https://www.yeduji.com/${path}${search}`;
                 }
               }
 
@@ -1300,28 +1275,6 @@ export default defineConfig(({ mode }) => {
               console.log(`[Browser Search] alicesw 第 ${pageNum} 页加载失败，停止分页喵~`);
               break;
             }
-          }
-        } else if (site === 'xpxs') {
-          // xpxs.net search logic - 虾皮小说喵~
-          console.log('[Browser Search] 开始虾皮小说浏览器搜索喵~');
-          const searchPageUrl = `https://www.xpxs.net/search/?searchkey=${encodeURIComponent(keyword)}`;
-          await page.goto(searchPageUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
-          await new Promise(resolve => setTimeout(resolve, 2000));
-          try {
-            await page.waitForSelector('dl, .item, .bookbox', { timeout: 10000 });
-          } catch (e) {
-            console.log('[Browser Search] xpxs wait timeout, continuing anyway喵~');
-          }
-        } else if (site === 'yeduji') {
-          // yeduji.com search logic - 夜读集喵~
-          console.log('[Browser Search] 开始夜读集浏览器搜索喵~');
-          const searchPageUrl = `https://www.yeduji.com/search?keyword=${encodeURIComponent(keyword)}`;
-          await page.goto(searchPageUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
-          await new Promise(resolve => setTimeout(resolve, 2000));
-          try {
-            await page.waitForSelector('.novel-item, .item, .book', { timeout: 10000 });
-          } catch (e) {
-            console.log('[Browser Search] yeduji wait timeout, continuing anyway喵~');
           }
         } else if (site === 'shukuge') {
           // shukuge.com search logic - 书库阁喵~
@@ -1906,6 +1859,130 @@ export default defineConfig(({ mode }) => {
                   res.end(JSON.stringify({ success: false, error: error.message }));
                 }
               })();
+              return;
+            }
+
+            // 5. Scraper Proxy (Enhanced) — AdaptiveFetcher-based proxy with TLS spoofing & encoding detection
+            if (url.pathname === '/api/scraper/proxy') {
+              const targetUrl = url.searchParams.get('url');
+              if (!targetUrl) {
+                res.statusCode = 400;
+                res.end(JSON.stringify({ error: 'Missing url parameter' }));
+                return;
+              }
+
+              import('./scrapling/AdaptiveFetcher.js').then(async ({ AdaptiveFetcher }) => {
+                try {
+                  const result = await AdaptiveFetcher.get(targetUrl, {
+                    stealthyHeaders: true,
+                    autoDetectEncoding: true,
+                    timeout: 20000,
+                    maxRetries: 2,
+                  });
+                  res.setHeader('Content-Type', 'application/json; charset=utf-8');
+                  res.end(JSON.stringify({
+                    success: true,
+                    body: result.text,
+                    status: result.status,
+                    encoding: result.encoding,
+                    finalUrl: result.finalUrl,
+                    elapsedMs: result.elapsedMs,
+                  }));
+                } catch (err: any) {
+                  res.statusCode = 502;
+                  res.end(JSON.stringify({ success: false, error: err.message }));
+                }
+              });
+              return;
+            }
+
+            // 6. Scraper Extract API — server-side DOM extraction using SmartSelector
+            if (url.pathname === '/api/scraper/extract' && req.method === 'POST') {
+              let body = '';
+              req.on('data', (chunk: string) => { body += chunk; });
+              req.on('end', () => {
+                import('./scrapling/SmartSelector.js').then(async ({ SmartSelector }) => {
+                  try {
+                    const { url: targetUrl, selectors } = JSON.parse(body);
+                    if (!targetUrl || !selectors) {
+                      res.statusCode = 400;
+                      res.end(JSON.stringify({ error: 'Missing url or selectors' }));
+                      return;
+                    }
+
+                    const { AdaptiveFetcher } = await import('./scrapling/AdaptiveFetcher.js');
+                    const response = await AdaptiveFetcher.get(targetUrl, {
+                      stealthyHeaders: true,
+                      autoDetectEncoding: true,
+                      timeout: 20000,
+                    });
+
+                    const selector = new SmartSelector(response.text, targetUrl);
+                    const results = selectors.map((sg: any) => selector.extract(sg));
+
+                    res.setHeader('Content-Type', 'application/json; charset=utf-8');
+                    res.end(JSON.stringify({
+                      success: true,
+                      url: targetUrl,
+                      results,
+                      encoding: response.encoding,
+                      elapsedMs: response.elapsedMs,
+                    }));
+                  } catch (err: any) {
+                    res.statusCode = 500;
+                    res.end(JSON.stringify({ success: false, error: err.message }));
+                  }
+                });
+              });
+              return;
+            }
+
+            // 7. Scraper GBK Search — GBK-encoded search with SmartSelector extraction
+            if (url.pathname === '/api/scraper/gbk-search' && req.method === 'POST') {
+              let body = '';
+              req.on('data', (chunk: string) => { body += chunk; });
+              req.on('end', () => {
+                import('iconv-lite').then(async (iconv) => {
+                  import('./scrapling/AdaptiveFetcher.js').then(async ({ AdaptiveFetcher }) => {
+                    import('./scrapling/SmartSelector.js').then(async ({ SmartSelector }) => {
+                      try {
+                        const { searchUrl, selectors, method, postData } = JSON.parse(body);
+                        if (!searchUrl) {
+                          res.statusCode = 400;
+                          res.end(JSON.stringify({ error: 'Missing searchUrl' }));
+                          return;
+                        }
+
+                        const fetchOptions: any = {
+                          stealthyHeaders: true,
+                          autoDetectEncoding: true,
+                          timeout: 20000,
+                        };
+
+                        if (method === 'POST' && postData) {
+                          fetchOptions.method = 'POST';
+                          fetchOptions.body = postData;
+                        }
+
+                        const response = await AdaptiveFetcher.get(searchUrl, fetchOptions);
+                        const selector = new SmartSelector(response.text, searchUrl);
+                        const results = selectors ? selectors.map((sg: any) => selector.extract(sg)) : [];
+
+                        res.setHeader('Content-Type', 'application/json; charset=utf-8');
+                        res.end(JSON.stringify({
+                          success: true,
+                          results,
+                          encoding: response.encoding,
+                          elapsedMs: response.elapsedMs,
+                        }));
+                      } catch (err: any) {
+                        res.statusCode = 500;
+                        res.end(JSON.stringify({ success: false, error: err.message }));
+                      }
+                    });
+                  });
+                });
+              });
               return;
             }
 
