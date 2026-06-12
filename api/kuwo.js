@@ -1,16 +1,22 @@
+
 export const config = {
   runtime: 'nodejs',
   maxDuration: 30,
 };
 
-export default async function handler(req) {
-  const url = new URL(req.url);
-  const keyword = url.searchParams.get('keyword');
+export default async function handler(req, res) {
+  const keyword = req.query.keyword;
+
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+
+  if (req.method === 'OPTIONS') {
+    return res.status(204).end();
+  }
 
   if (!keyword) {
-    return new Response(JSON.stringify({ code: 400, msg: 'Missing keyword' }), {
-      headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
-    });
+    return res.status(400).json({ code: 400, msg: 'Missing keyword' });
   }
 
   try {
@@ -39,17 +45,11 @@ export default async function handler(req) {
         rid: item.rid
       }));
       
-      return new Response(JSON.stringify({ code: 200, results }), {
-        headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
-      });
+      return res.status(200).json({ code: 200, results });
     }
 
-    return new Response(JSON.stringify({ code: 404, msg: 'No results' }), {
-      headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
-    });
+    return res.status(200).json({ code: 404, msg: 'No results' });
   } catch (error) {
-    return new Response(JSON.stringify({ code: 500, msg: error.message }), {
-      headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
-    });
+    return res.status(500).json({ code: 500, msg: error.message });
   }
 }

@@ -1,16 +1,22 @@
+
 export const config = {
   runtime: 'nodejs',
   maxDuration: 30,
 };
 
-export default async function handler(req) {
-  const url = new URL(req.url);
-  const keyword = url.searchParams.get('keyword');
+export default async function handler(req, res) {
+  const keyword = req.query.keyword;
+
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+
+  if (req.method === 'OPTIONS') {
+    return res.status(204).end();
+  }
 
   if (!keyword) {
-    return new Response(JSON.stringify({ code: 400, msg: 'Missing keyword' }), {
-      headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
-    });
+    return res.status(400).json({ code: 400, msg: 'Missing keyword' });
   }
 
   try {
@@ -24,7 +30,7 @@ export default async function handler(req) {
     });
 
     const data = await response.json();
-    console.log('[Migu Search] Response:', data);
+    console.log('[Migu Search] Response code check:', data.code || 'no code');
     
     if (data.musics && data.musics.length > 0) {
       const results = data.musics.map(item => ({
@@ -41,18 +47,12 @@ export default async function handler(req) {
         lyricUrl: item.lyricUrl || ''
       }));
       
-      return new Response(JSON.stringify({ code: 200, results }), {
-        headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
-      });
+      return res.status(200).json({ code: 200, results });
     }
 
-    return new Response(JSON.stringify({ code: 404, msg: 'No results', raw: data }), {
-      headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
-    });
+    return res.status(200).json({ code: 404, msg: 'No results' });
   } catch (error) {
     console.error('[Migu Search] Error:', error);
-    return new Response(JSON.stringify({ code: 500, msg: error.message }), {
-      headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
-    });
+    return res.status(500).json({ code: 500, msg: error.message });
   }
 }
