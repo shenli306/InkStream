@@ -4,7 +4,6 @@ export const config = {
   maxDuration: 30,
 };
 
-import { JSDOM } from 'jsdom';
 import iconv from 'iconv-lite';
 
 async function fetchWithTimeout(url, options, timeout = 15000) {
@@ -86,7 +85,7 @@ async function fetchPageHtml(targetUrl, encodingHint = 'utf-8') {
         }
       }
 
-      // 编码检测：先找 content-type 头，如果是 GBK 则用 iconv 解码
+      // 编码检测
       const ct = String(response.headers.get('content-type') || '').toLowerCase();
       let useEncoding = encodingHint;
       if (ct.includes('gbk') || ct.includes('gb2312') || ct.includes('gb18030')) {
@@ -95,7 +94,7 @@ async function fetchPageHtml(targetUrl, encodingHint = 'utf-8') {
         useEncoding = 'utf-8';
       } else {
         // 在 HTML meta 中检测编码
-        const sample = buf.toString('utf-8', 0, 2000).toLowerCase();
+        const sample = buf.toString('utf-8', 0, 3000).toLowerCase();
         const m = sample.match(/charset\s*=\s*["']?\s*([a-z0-9-]+)/i);
         if (m) {
           const cs = m[1].toLowerCase();
@@ -125,241 +124,295 @@ async function fetchPageHtml(targetUrl, encodingHint = 'utf-8') {
   return html;
 }
 
-// 从 HTML 中解析搜索结果 - 支持多个书源的不同 DOM 结构
-function parseWanbengeResults(html, keyword) {
-  const dom = new JSDOM(html);
-  const doc = dom.window.document;
+// 简单的 HTML 解析辅助函数
+function extractAttrs(html, tagName, attrName) {
   const results = [];
-  const kwLower = keyword.toLowerCase();
-
-  // 策略1：直接跳转到详情页（标题匹配）
-  const pageTitle = doc.querySelector('title')?.textContent || '';
-  const h1Title = doc.querySelector('h1')?.textContent || '';
-  if (pageTitle.toLowerCase().includes(kwLower) || h1Title.toLowerCase().includes(kwLower)) {
-    results.push({
-      title: (doc.querySelector('h1')?.textContent || doc.querySelector('h2')?.textContent || keyword).trim(),
-      author: (doc.querySelector('.booktag .red, .book-author, .author')?.textContent || '未知').trim(),
-      coverUrl: doc.querySelector('.bookimg img, img[src*="cover"], img.thumbnail')?.getAttribute('src') || '',
-      detailUrl: doc.querySelector('link[rel="canonical"]')?.getAttribute('href') || '',
-      description: doc.querySelector('#bookIntro, .bookintro, .intro')?.textContent?.trim().substring(0, 150) || '',
-    });
+  // 匹配 <tag ... attr="value" ...> 或 <tag ... attr='value' ...>
+  const regex = new RegExp(`<${tagName}[^>]+\\s${attrName}=["']([^"']+)["'][^>]*>`, 'gi');
+  let match;
+  while ((match = regex.exec(html)) !== null) {
+    results.push(match[1]);
   }
-
-  // 策略2：搜索结果列表
-  const ulItems = doc.querySelectorAll('.mySearch ul, .search-result ul, .result ul');
-  ulItems.forEach(ul => {
-    const links = ul.querySelectorAll('a[href*="/info/"], a[href*="/book/"]');
-    links.forEach(a => {
-      const title = a.textContent?.trim();
-      if (title && title.toLowerCase().includes(kwLower)) {
-        results.push({
-          title,
-          author: '未知',
-          coverUrl: '',
-          detailUrl: a.getAttribute('href') || '',
-          description: '',
-        });
-      }
-    });
-  });
-
-  // 策略3：表格/列表形式的搜索结果
-  if (results.length === 0) {
-    const allLinks = doc.querySelectorAll('a[href*="/info/"], a[href*="/book/"]');
-    allLinks.forEach(a => {
-      const title = a.textContent?.trim();
-      if (title && title.length > 1 && title.length < 50 &&
-        (title.toLowerCase().includes(kwLower) || kwLower.includes(title.toLowerCase().substring(0, Math.min(4, title.length))))) {
-        if (!results.some(r => r.detailUrl === a.getAttribute('href'))) {
-          results.push({
-            title,
-            author: '未知',
-            coverUrl: '',
-            detailUrl: a.getAttribute('href') || '',
-            description: '',
-          });
-        }
-      }
-    });
-  }
-
-  return results.slice(0, 20);
+  return results;
 }
 
-function parseShukugeResults(html, keyword) {
-  const dom = new JSDOM(html);
-  const doc = dom.window.document;
-  const kwLower = keyword.toLowerCase();
+function extractText(html, tagName) {
   const results = [];
-
-  doc.querySelectorAll('.listitem').forEach(item => {
-    const titleEl = item.querySelector('h2 a, h3 a, a');
-    const title = (titleEl?.textContent || '').trim().replace(/\s*\(txt全集\)|txt全集下载/g, '');
-    if (!title || !title.toLowerCase().includes(kwLower)) return;
-
-    const descMatch = (item.querySelector('.bookdesc')?.textContent || '').match(/作者：(.+?)(\s|分类|$)/);
-    const author = descMatch ? descMatch[1].trim() : '未知';
-    const href = titleEl?.getAttribute('href') || '';
-    const coverUrl = item.querySelector('img')?.getAttribute('src') || '';
-    const descText = (item.querySelector('.bookdesc')?.textContent || '').replace(/简介[:：]/, '').trim();
-
-    results.push({
-      title,
-      author,
-      coverUrl,
-      detailUrl: href,
-      description: descText.substring(0, 150),
-    });
-  });
-
-  // 如果 .listitem 没有，尝试全局查找
-  if (results.length === 0) {
-    doc.querySelectorAll('a[href*="/book/"]').forEach(a => {
-      const title = (a.textContent || '').trim();
-      if (title && title.length > 1 && title.length < 50 && title.toLowerCase().includes(kwLower)) {
-        if (!results.some(r => r.detailUrl === a.getAttribute('href'))) {
-          results.push({
-            title,
-            author: '未知',
-            coverUrl: '',
-            detailUrl: a.getAttribute('href') || '',
-            description: '',
-          });
-        }
-      }
-    });
+  // 匹配 <tag ...>文本</tag> 或 <tag>文本</tag>
+  const regex = new RegExp(`<${tagName}[^>]*>([\\s\\S]*?)</${tagName}>`, 'gi');
+  let match;
+  while ((match = regex.exec(html)) !== null) {
+    const text = match[1].replace(/<[^>]+>/g, '').trim();
+    if (text) results.push(text);
   }
-
-  return results.slice(0, 20);
+  return results;
 }
 
-function parseDingdianResults(html, keyword) {
-  const dom = new JSDOM(html);
-  const doc = dom.window.document;
-  const kwLower = keyword.toLowerCase();
+function extractLinks(html, pattern) {
   const results = [];
-
-  // 顶点小说网 .item 结构
-  doc.querySelectorAll('.item').forEach(item => {
-    const titleLink = item.querySelector('dl dt a, a');
-    const title = (titleLink?.textContent || '').trim();
-    if (!title || !title.toLowerCase().includes(kwLower)) return;
-
-    const authorEl = item.querySelector('dt span, .btm, dd span');
-    const author = (authorEl?.textContent || '未知').replace(/作者[：:]/g, '').trim();
-    const href = titleLink?.getAttribute('href') || '';
-    const coverUrl = item.querySelector('img')?.getAttribute('data-original') || item.querySelector('img')?.getAttribute('src') || '';
-    const description = item.querySelector('dd')?.textContent?.trim().substring(0, 150) || '';
-
-    results.push({ title, author, coverUrl, detailUrl: href, description });
-  });
-
-  // 兜底：<dt><a> 结构
-  if (results.length === 0) {
-    doc.querySelectorAll('dt a').forEach(a => {
-      const title = (a.textContent || '').trim();
-      if (title && title.length > 1 && title.length < 50 && title.toLowerCase().includes(kwLower)) {
-        results.push({
-          title,
-          author: '未知',
-          coverUrl: '',
-          detailUrl: a.getAttribute('href') || '',
-          description: '',
-        });
-      }
-    });
-  }
-
-  return results.slice(0, 20);
-}
-
-function parseBqguiResults(html, keyword) {
-  const dom = new JSDOM(html);
-  const doc = dom.window.document;
-  const kwLower = keyword.toLowerCase();
-  const results = [];
-
-  // 直接跳转详情页
-  const metaType = doc.querySelector('meta[property="og:type"]')?.getAttribute('content');
-  if (metaType === 'novel') {
-    const title = doc.querySelector('meta[property="og:title"]')?.getAttribute('content') || doc.querySelector('h1')?.textContent || '';
-    if (title && title.toLowerCase().includes(kwLower)) {
-      results.push({
-        title: title.trim(),
-        author: doc.querySelector('meta[property="og:novel:author"]')?.getAttribute('content') || '未知',
-        coverUrl: doc.querySelector('meta[property="og:image"]')?.getAttribute('content') || '',
-        detailUrl: doc.querySelector('meta[property="og:url"]')?.getAttribute('content') || '',
-        description: doc.querySelector('meta[property="og:description"]')?.getAttribute('content').substring(0, 150) || '',
-      });
+  // 匹配 <a href="url" ...>title</a>
+  const regex = /<a[^>]+href=["']([^"']+)["'][^>]*>([^<]*)<\/a>/gi;
+  let match;
+  while ((match = regex.exec(html)) !== null) {
+    const href = match[1];
+    const title = match[2].replace(/<[^>]+>/g, '').trim();
+    if (pattern.test(href) && title) {
+      results.push({ href, title });
     }
   }
+  return results;
+}
 
-  // 搜索列表页
-  if (results.length === 0) {
-    doc.querySelectorAll('.bookbox, .book-item').forEach(box => {
-      const link = box.querySelector('.bookname a, a');
-      const title = (link?.textContent || '').trim();
-      if (!title || !title.toLowerCase().includes(kwLower)) return;
-      const authorEl = box.querySelector('.author');
+// 解析完本阁搜索结果
+function parseWanbengeResults(html, keyword) {
+  const results = [];
+  const kwLower = keyword.toLowerCase();
+
+  // 策略1：检测是否直接跳转详情页
+  const titleMatch = html.match(/<h1[^>]*class=["']booktitle["'][^>]*>([\s\S]*?)<\/h1>/i);
+  if (titleMatch) {
+    const title = titleMatch[1].replace(/<[^>]+>/g, '').trim();
+    if (title && (title.toLowerCase().includes(kwLower) || kwLower.includes(title.toLowerCase().substring(0, 3)))) {
+      const canonical = html.match(/<link[^>]+rel=["']canonical["'][^>]+href=["']([^"']+)["']/i);
+      const authorMatch = html.match(/<a[^>]+class=["'][^"']*author[^"']*["'][^>]*>([^<]+)<\/a>/i);
       results.push({
         title,
-        author: (authorEl?.textContent || '未知').replace(/作者[:：]/g, '').trim(),
-        coverUrl: box.querySelector('img')?.getAttribute('src') || '',
-        detailUrl: link?.getAttribute('href') || '',
-        description: (box.querySelector('.intro, .uptime')?.textContent || '').replace(/简介[:：]/g, '').trim().substring(0, 150),
+        author: authorMatch ? authorMatch[1].trim() : '未知',
+        coverUrl: '',
+        detailUrl: canonical ? canonical[1] : '',
+        description: '',
       });
-    });
+    }
   }
 
-  // 兜底：全站链接
-  if (results.length === 0) {
-    doc.querySelectorAll('a[href*="/"]').forEach(a => {
-      const title = (a.textContent || '').trim();
-      if (title && title.length > 1 && title.length < 50 && title.toLowerCase().includes(kwLower)) {
-        if (!results.some(r => r.detailUrl === a.getAttribute('href'))) {
-          results.push({
-            title, author: '未知', coverUrl: '',
-            detailUrl: a.getAttribute('href') || '',
-            description: '',
-          });
+  // 策略2：解析 .bookbox 或 .item 结构
+  const bookboxMatches = html.match(/<div[^>]+class=["'][^"']*bookbox[^"']*["'][^>]*>([\s\S]*?)<\/div>\s*<\/div>/gi) || [];
+  for (const box of bookboxMatches) {
+    const titleMatch = box.match(/class=["']bookname["'][^>]*>\s*<a[^>]+>([^<]+)<\/a>/i);
+    const authorMatch = box.match(/class=["']author["'][^>]*>([^<]+)<\/a>/i);
+    const linkMatch = box.match(/<a[^>]+href=["']([^"']+)["'][^>]*class=["']bookname["']/i);
+    const descMatch = box.match(/class=["'](?:intro|update|desc)["'][^>]*>([^<]+)/i);
+    if (titleMatch) {
+      const title = titleMatch[1].trim();
+      if (title.toLowerCase().includes(kwLower) || kwLower.includes(title.toLowerCase().substring(0, 3))) {
+        results.push({
+          title,
+          author: authorMatch ? authorMatch[1].trim() : '未知',
+          coverUrl: '',
+          detailUrl: linkMatch ? linkMatch[1] : '',
+          description: descMatch ? descMatch[1].trim().substring(0, 150) : '',
+        });
+      }
+    }
+  }
+
+  // 策略3：解析 <dt><a href> 结构
+  const dtLinks = html.match(/<dt[^>]*>([\s\S]*?)<\/dt>/gi) || [];
+  for (const dt of dtLinks) {
+    const aMatch = dt.match(/<a[^>]+href=["']([^"']+)["'][^>]*>([^<]+)<\/a>/i);
+    if (aMatch) {
+      const href = aMatch[1];
+      const title = aMatch[2].trim();
+      if (href.includes('/info/') && title.length > 1 && title.length < 50) {
+        if (title.toLowerCase().includes(kwLower) || kwLower.includes(title.toLowerCase().substring(0, 3))) {
+          if (!results.some(r => r.detailUrl === href)) {
+            const authorMatch = dt.match(/<span[^>]*>([^<]+)<\/span>/i);
+            results.push({
+              title,
+              author: authorMatch ? authorMatch[1].trim() : '未知',
+              coverUrl: '',
+              detailUrl: href,
+              description: '',
+            });
+          }
         }
       }
-    });
+    }
   }
 
   return results.slice(0, 20);
 }
 
-function parseAliceswResults(html, keyword) {
-  const dom = new JSDOM(html);
-  const doc = dom.window.document;
-  const kwLower = keyword.toLowerCase();
+// 解析顶点小说搜索结果
+function parseDingdianResults(html, keyword) {
   const results = [];
+  const kwLower = keyword.toLowerCase();
 
-  doc.querySelectorAll('h4 a, h3 a, h5 a, .list-group-item a').forEach(a => {
-    const href = a.getAttribute('href') || '';
-    if (!href.includes('/novel/') && !href.includes('/book/')) return;
-    const title = (a.textContent || '').replace(/^\d+[\.\、\s《]+/, '').trim();
-    if (!title || title.length < 2) return;
-    if (!title.toLowerCase().includes(kwLower) && !kwLower.includes(title.toLowerCase().substring(0, Math.min(4, title.length)))) return;
-    if (results.some(r => r.detailUrl === href)) return;
-
-    // 从同一父容器中提取作者
-    let author = '未知';
-    const parent = a.closest('.list-group-item, div, li');
-    if (parent) {
-      const authorLink = parent.querySelector('p.mb-1 a, a[href*="/author/"]');
-      if (authorLink) author = (authorLink.textContent || '未知').trim();
+  // 解析 .item 结构
+  const itemMatches = html.match(/<div[^>]+class=["'][^"']*item[^"']*["'][^>]*>([\s\S]*?)<\/div>\s*<\/div>/gi) || [];
+  for (const item of itemMatches) {
+    const titleMatch = item.match(/<dt[^>]*>\s*<a[^>]+href=["']([^"']+)["'][^>]*>([^<]+)<\/a>/i);
+    const authorMatch = item.match(/<span[^>]*class=["'][^"']*(?:btm|author)[^"']*["'][^>]*>([^<]+)<\/span>/i);
+    const descMatch = item.match(/<dd[^>]*>([\s\S]*?)<\/dd>/i);
+    if (titleMatch) {
+      const href = titleMatch[1];
+      const title = titleMatch[2].trim();
+      if (href.includes('/book/') || href.includes('/info/')) {
+        if (title.toLowerCase().includes(kwLower) || kwLower.includes(title.toLowerCase().substring(0, 3))) {
+          results.push({
+            title,
+            author: authorMatch ? authorMatch[1].trim() : '未知',
+            coverUrl: '',
+            detailUrl: href,
+            description: descMatch ? descMatch[1].replace(/<[^>]+>/g, '').trim().substring(0, 150) : '',
+          });
+        }
+      }
     }
+  }
 
-    results.push({
-      title,
-      author,
-      coverUrl: '',
-      detailUrl: href,
-      description: '',
-    });
-  });
+  // 兜底：直接搜索 <a href="/book/...">xxx</a>
+  if (results.length === 0) {
+    const links = extractLinks(html, /\/(?:book|info)\/\d+/i);
+    for (const { href, title } of links) {
+      if (title.length > 1 && title.length < 50) {
+        if (title.toLowerCase().includes(kwLower) || kwLower.includes(title.toLowerCase().substring(0, 3))) {
+          if (!results.some(r => r.detailUrl === href)) {
+            results.push({ title, author: '未知', coverUrl: '', detailUrl: href, description: '' });
+          }
+        }
+      }
+    }
+  }
+
+  return results.slice(0, 20);
+}
+
+// 解析笔趣阁搜索结果
+function parseBqguiResults(html, keyword) {
+  const results = [];
+  const kwLower = keyword.toLowerCase();
+
+  // 检测直接跳转详情页
+  const ogType = html.match(/<meta[^>]+property=["']og:type["'][^>]+content=["']([^"']+)["']/i);
+  if (ogType && ogType[1] === 'novel') {
+    const ogTitle = html.match(/<meta[^>]+property=["']og:title["'][^>]+content=["']([^"']+)["']/i);
+    const ogAuthor = html.match(/<meta[^>]+property=["']og:novel:author["'][^>]+content=["']([^"']+)["']/i);
+    const ogUrl = html.match(/<meta[^>]+property=["']og:url["'][^>]+content=["']([^"']+)["']/i);
+    const ogDesc = html.match(/<meta[^>]+property=["']og:description["'][^>]+content=["']([^"']+)["']/i);
+    if (ogTitle) {
+      const title = ogTitle[1].trim();
+      if (title.toLowerCase().includes(kwLower) || kwLower.includes(title.toLowerCase().substring(0, 3))) {
+        results.push({
+          title,
+          author: ogAuthor ? ogAuthor[1].trim() : '未知',
+          coverUrl: '',
+          detailUrl: ogUrl ? ogUrl[1] : '',
+          description: ogDesc ? ogDesc[1].substring(0, 150) : '',
+        });
+      }
+    }
+  }
+
+  // 解析 .bookbox 结构
+  if (results.length === 0) {
+    const bookboxes = html.match(/<div[^>]+class=["'][^"']*bookbox[^"']*["'][^>]*>([\s\S]*?)<\/div>\s*<\/div>/gi) || [];
+    for (const box of bookboxes) {
+      const linkMatch = box.match(/class=["']bookname["'][^>]*>\s*<a[^>]+href=["']([^"']+)["'][^>]*>([^<]+)<\/a>/i);
+      const authorMatch = box.match(/class=["']author["'][^>]*>([^<]+)<\/a>/i);
+      const descMatch = box.match(/class=["'](?:intro|update)["'][^>]*>([^<]+)/i);
+      if (linkMatch) {
+        const href = linkMatch[1];
+        const title = linkMatch[2].trim();
+        if (title.toLowerCase().includes(kwLower) || kwLower.includes(title.toLowerCase().substring(0, 3))) {
+          results.push({
+            title,
+            author: authorMatch ? authorMatch[1].trim() : '未知',
+            coverUrl: '',
+            detailUrl: href,
+            description: descMatch ? descMatch[1].trim().substring(0, 150) : '',
+          });
+        }
+      }
+    }
+  }
+
+  // 兜底：全局搜索
+  if (results.length === 0) {
+    const links = extractLinks(html, /\/book\/\d+/i);
+    for (const { href, title } of links) {
+      if (title.length > 1 && title.length < 50) {
+        if (title.toLowerCase().includes(kwLower) || kwLower.includes(title.toLowerCase().substring(0, 3))) {
+          if (!results.some(r => r.detailUrl === href)) {
+            results.push({ title, author: '未知', coverUrl: '', detailUrl: href, description: '' });
+          }
+        }
+      }
+    }
+  }
+
+  return results.slice(0, 20);
+}
+
+// 解析爱丽丝书屋搜索结果
+function parseAliceswResults(html, keyword) {
+  const results = [];
+  const kwLower = keyword.toLowerCase();
+
+  // 解析 <h4><a href="/novel/...">title</a></h4> 结构
+  const hMatches = html.match(/<h[1-5][^>]*>([\s\S]*?)<\/h[1-5]>/gi) || [];
+  for (const h of hMatches) {
+    const aMatch = h.match(/<a[^>]+href=["']([^"']+)["'][^>]*>([^<]+)<\/a>/i);
+    if (aMatch) {
+      const href = aMatch[1];
+      const rawTitle = aMatch[2].trim().replace(/^\d+[\.\、\s《]+/, '');
+      const title = rawTitle.replace(/^《|》$/g, '').trim();
+      if ((href.includes('/novel/') || href.includes('/book/')) && title.length >= 2) {
+        if (title.toLowerCase().includes(kwLower) || kwLower.includes(title.toLowerCase().substring(0, 3))) {
+          if (!results.some(r => r.detailUrl === href)) {
+            // 尝试从父容器找作者
+            let author = '未知';
+            const authorMatch = h.match(/作者[:：]\s*([^\s<]+)/i) || html.substring(html.indexOf(h) - 200, html.indexOf(h)).match(/作者[:：]\s*([^\s<,，]+)/i);
+            if (authorMatch) author = authorMatch[1].trim();
+            results.push({ title, author, coverUrl: '', detailUrl: href, description: '' });
+          }
+        }
+      }
+    }
+  }
+
+  return results.slice(0, 20);
+}
+
+// 解析书库阁搜索结果
+function parseShukugeResults(html, keyword) {
+  const results = [];
+  const kwLower = keyword.toLowerCase();
+
+  // 解析 .listitem 结构
+  const items = html.match(/<div[^>]+class=["'][^"']*listitem[^"']*["'][^>]*>([\s\S]*?)<\/div>\s*<\/div>/gi) || [];
+  for (const item of items) {
+    const titleMatch = item.match(/<h[1-6][^>]*>\s*<a[^>]+href=["']([^"']+)["'][^>]*>([^<]+)<\/a>/i);
+    if (titleMatch) {
+      const href = titleMatch[1];
+      const rawTitle = titleMatch[2].trim().replace(/\s*\(txt全集\)|txt全集下载/g, '');
+      const title = rawTitle;
+      if (title.toLowerCase().includes(kwLower) || kwLower.includes(title.toLowerCase().substring(0, 3))) {
+        const authorMatch = item.match(/作者[:：]\s*([^\s<，,]+)/i);
+        const descMatch = item.match(/简介[:：]\s*([\s\S]*?)(?:<|$)/i);
+        results.push({
+          title,
+          author: authorMatch ? authorMatch[1].trim() : '未知',
+          coverUrl: '',
+          detailUrl: href,
+          description: descMatch ? descMatch[1].replace(/<[^>]+>/g, '').trim().substring(0, 150) : '',
+        });
+      }
+    }
+  }
+
+  if (results.length === 0) {
+    const links = extractLinks(html, /\/book\/\d+/i);
+    for (const { href, title } of links) {
+      if (title.length > 1 && title.length < 50) {
+        if (title.toLowerCase().includes(kwLower) || kwLower.includes(title.toLowerCase().substring(0, 3))) {
+          if (!results.some(r => r.detailUrl === href)) {
+            results.push({ title, author: '未知', coverUrl: '', detailUrl: href, description: '' });
+          }
+        }
+      }
+    }
+  }
 
   return results.slice(0, 20);
 }
@@ -409,63 +462,23 @@ export default async function handler(req, res) {
         encoding = 'gbk';
     }
 
-    console.log(`[Browser-Search] Searching ${site} for: ${kw}, URL: ${searchUrl.substring(0, 80)}`);
+    console.log(`[Browser-Search] ${site}: ${kw}, URL: ${searchUrl.substring(0, 80)}`);
 
-    // 1. 先尝试 GET 方式
     let html = null;
     try {
       html = await fetchPageHtml(searchUrl, encoding);
     } catch (e) {
-      console.log(`[Browser-Search] GET failed, will try POST for wanbenge: ${e.message}`);
-    }
-
-    // 2. 完本阁专用 POST 回退
-    if (!html && site === 'wanbenge') {
-      try {
-        const gbkBuf = iconv.encode(kw, 'gbk');
-        let gbkEnc = '';
-        for (let i = 0; i < gbkBuf.length; i++) {
-          gbkEnc += '%' + gbkBuf[i].toString(16).toUpperCase().padStart(2, '0');
-        }
-        const postProxies = [
-          `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent('https://www.jizai22.com/modules/article/search.php')}`,
-          `https://corsproxy.io/?${encodeURIComponent('https://www.jizai22.com/modules/article/search.php')}`,
-        ];
-        for (const pUrl of postProxies) {
-          try {
-            const response = await fetchWithTimeout(pUrl, {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/x-www-form-urlencoded',
-                'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1',
-              },
-              body: `searchkey=${gbkEnc}&action=search`,
-            });
-            if (response.ok) {
-              const buf = Buffer.from(await response.arrayBuffer());
-              if (buf.length > 100) {
-                html = iconv.decode(buf, 'gbk');
-                break;
-              }
-            }
-          } catch (e) {
-            console.log(`[Browser-Search] Wanbenge POST proxy failed: ${e.message}`);
-          }
-        }
-      } catch (e) {
-        console.log(`[Browser-Search] Wanbenge POST fallback failed: ${e.message}`);
-      }
+      console.log(`[Browser-Search] Fetch failed: ${e.message}`);
     }
 
     if (!html || html.length < 200) {
       return res.status(200).json({
         success: false,
         results: [],
-        message: 'Failed to fetch search page',
+        message: html ? 'HTML too short' : 'Failed to fetch',
       });
     }
 
-    // 根据书源解析结果
     let results = [];
     try {
       switch (site) {
@@ -477,14 +490,14 @@ export default async function handler(req, res) {
         default: results = parseShukugeResults(html, kw);
       }
     } catch (e) {
-      console.error(`[Browser-Search] Parse error for ${site}: ${e.message}`);
+      console.error(`[Browser-Search] Parse error: ${e.message}`);
     }
 
-    console.log(`[Browser-Search] ${site} found ${results.length} results for "${kw}"`);
+    console.log(`[Browser-Search] ${site} found ${results.length} results`);
 
     return res.status(200).json({
       success: results.length > 0,
-      results: results,
+      results,
       message: results.length > 0 ? 'OK' : 'No results',
     });
   } catch (error) {

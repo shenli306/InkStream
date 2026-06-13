@@ -150,10 +150,39 @@ export default async function handler(req, res) {
 
     // 传递响应头（排除会干扰的头）喵~
     const contentType = String(finalResponse.headers.get('content-type') || '');
-    const isImage = contentType.toLowerCase().startsWith('image/');
-    const isHtml = contentType.toLowerCase().includes('text/html') || contentType.toLowerCase().includes('application/xhtml');
+    const contentTypeLower = contentType.toLowerCase();
+    const isImage = contentTypeLower.startsWith('image/');
+    const isHtml = contentTypeLower.includes('text/html') || contentTypeLower.includes('application/xhtml');
 
-    // 我们设置 content-type，但对于 HTML 页面不强制指定 charset，让浏览器自动检测喵~
+    // 重要：把 HTML 中的相对 URL 转换为原始域的绝对 URL
+    // 否则前端 DOMParser 解析时会把相对 URL 解析成我们的 Vercel 域，导致后续 fetch 详情页失败喵~
+    if (isHtml && finalBuffer) {
+      try {
+        const htmlText = finalBuffer.toString('utf-8');
+        // 如果 HTML 中包含协议相对 URL（//host/path），替换为原始域的绝对 URL
+        if (htmlText.includes('//' + urlObj.host + '/') || htmlText.includes('="/') || htmlText.includes("='/")) {
+          const httpsOrigin = 'https://' + urlObj.host;
+          // 替换 src="/", href="/", srcset 中的相对 URL
+          let fixedHtml = htmlText
+            .replace(/src="\/([^"]*?)"/g, `src="${httpsOrigin}/$1"`)
+            .replace(/src='\/([^']*?)'/g, `src='${httpsOrigin}/$1'`)
+            .replace(/href="\/([^"]*?)"/g, `href="${httpsOrigin}/$1"`)
+            .replace(/href='\/([^']*?)'/g, `href='${httpsOrigin}/$1'`)
+            .replace(/srcset="\/([^"]*?)"/g, `srcset="${httpsOrigin}/$1"`)
+            .replace(/srcset='\/([^']*?)'/g, `srcset='${httpsOrigin}/$1'`)
+            // 处理 action="/path" 表单提交目标
+            .replace(/action="\/([^"]*?)"/g, `action="${httpsOrigin}/$1"`)
+            .replace(/action='\/([^']*?)'/g, `action='${httpsOrigin}/$1'`);
+          // 仅在确实有修改时才更新 buffer
+          if (fixedHtml !== htmlText) {
+            finalBuffer = Buffer.from(fixedHtml, 'utf-8');
+          }
+        }
+      } catch (e) {
+        // URL 重写失败不影响正常返回
+      }
+    }
+
     if (contentType) {
       res.setHeader('Content-Type', contentType);
     }
@@ -162,7 +191,6 @@ export default async function handler(req, res) {
       res.setHeader('Cache-Control', 'public, max-age=604800, immutable');
     }
 
-    // 将目标响应头转发给客户端（但排除可能引起问题的头）喵~
     finalResponse.headers.forEach((value, key) => {
       const lowerKey = key.toLowerCase();
       if (
@@ -178,7 +206,6 @@ export default async function handler(req, res) {
       ) {
         return;
       }
-      // 不覆盖我们已经设置的 CORS 头
       if (lowerKey.startsWith('access-control-')) return;
       res.setHeader(key, value);
     });
