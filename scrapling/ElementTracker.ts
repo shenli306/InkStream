@@ -168,7 +168,7 @@ export class ElementTracker {
     if (!sig) return null;
 
     // 在相同标签名下搜索
-    const candidates = this.selector.document.querySelectorAll(sig.tagName);
+    const candidates = Array.from(this.selector.document.querySelectorAll(sig.tagName));
     let bestMatch: Element | null = null;
     let bestScore = 0;
 
@@ -367,7 +367,7 @@ export class ElementTracker {
     let dotProduct = 0;
     let normA = 0;
     let normB = 0;
-    for (const tag of allChildTags) {
+    for (const tag of Array.from(allChildTags)) {
       const va = a.childTagDistribution[tag] || 0;
       const vb = b.childTagDistribution[tag] || 0;
       dotProduct += va * vb;

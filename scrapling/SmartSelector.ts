@@ -153,7 +153,7 @@ export class SmartSelector {
    */
   text(containing: string, tag?: string, attribute?: string): string | null {
     const selector = tag ? `${tag}` : '*';
-    const els = this.doc.querySelectorAll(selector);
+    const els = Array.from(this.doc.querySelectorAll(selector));
     for (const el of els) {
       if (el.textContent?.includes(containing)) {
         return this.extractFromElement(el, attribute);
@@ -167,7 +167,7 @@ export class SmartSelector {
    */
   textAll(containing: string, tag?: string, attribute?: string): string[] {
     const selector = tag ? `${tag}` : '*';
-    const els = this.doc.querySelectorAll(selector);
+    const els = Array.from(this.doc.querySelectorAll(selector));
     const results: string[] = [];
     for (const el of els) {
       if (el.textContent?.includes(containing)) {
@@ -183,7 +183,7 @@ export class SmartSelector {
    */
   regex(pattern: RegExp, tag?: string, groupIndex?: number): string | null {
     const selector = tag ? `${tag}` : '*';
-    const els = this.doc.querySelectorAll(selector);
+    const els = Array.from(this.doc.querySelectorAll(selector));
     const idx = groupIndex ?? 1;
     for (const el of els) {
       const text = el.textContent ?? '';
@@ -200,7 +200,7 @@ export class SmartSelector {
    */
   regexAll(pattern: RegExp, tag?: string, groupIndex?: number): string[] {
     const selector = tag ? `${tag}` : '*';
-    const els = this.doc.querySelectorAll(selector);
+    const els = Array.from(this.doc.querySelectorAll(selector));
     const idx = groupIndex ?? 1;
     const results: string[] = [];
     for (const el of els) {
@@ -297,7 +297,7 @@ export class SmartSelector {
     if (!sample) return null;
 
     const sampleSig = this.getElementSignature(sample);
-    const candidates = this.doc.querySelectorAll(candidatesSelector);
+    const candidates = Array.from(this.doc.querySelectorAll(candidatesSelector));
 
     let bestMatch: Element | null = null;
     let bestScore = 0;
