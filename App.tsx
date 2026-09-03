@@ -1,0 +1,850 @@
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import { Search, Download, ArrowRight, Loader2, Globe, FileText, CheckCircle2, AlertCircle, ChevronLeft, Play, X, Video, Image as ImageIcon, Folder, ChevronRight, Maximize2, Book, BookOpen, Music as LucideMusic, ArrowUp } from 'lucide-react';
+import { Novel, AppState } from './types';
+import { searchNovel, getNovelDetails, downloadAndParseNovel, fetchBlob } from './services/source';
+import { generateEpub } from './services/epub';
+import { DynamicIsland } from './components/DynamicIsland';
+import { CuteProgress } from './components/CuteProgress';
+import { BookCard } from './components/BookCard';
+import { Reader } from './components/Reader';
+import { VideoCard } from './components/VideoCard';
+import { SourceSelector } from './components/SourceSelector';
+import { MusicSearch, MusicSearchRef } from './components/MusicSearch';
+import { MangaSearch } from './components/MangaSearch';
+import { useMediaLibrary } from './hooks/useMediaLibrary';
+import { groupVideosByTime } from './utils/media';
+
+import { resolveCoverUrl } from './utils/cover';
+
+export default function App() {
+  const [query, setQuery] = useState('');
+  const [state, setState] = useState<AppState>(AppState.IDLE);
+  const [searchResults, setSearchResults] = useState<Novel[]>([]);
+  const [selectedNovel, setSelectedNovel] = useState<Novel | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [scrollPosition, setScrollPosition] = useState(0);
+  
+  // 检测设备类型
+  const isMobile = useMemo(() => {
+    if (typeof window === 'undefined') return false;
+    const userAgent = window.navigator.userAgent.toLowerCase();
+    return /android|webos|iphone|ipad|ipod|blackberry|iemobile|opera mini/i.test(userAgent);
+  }, []);
+  
+  // 界面类型状态
+  const [activeView, setActiveView] = useState<'novel' | 'music' | 'manga'>('novel');
+  
+  // 音乐界面状态
+  const [musicState, setMusicState] = useState<{ isSearching: boolean; isDownloading: boolean; isDownloadComplete: boolean; currentMusic: any; isPlaying: boolean; isLoading: boolean }>({
+    isSearching: false,
+    isDownloading: false,
+    isDownloadComplete: false,
+    currentMusic: null,
+    isPlaying: false,
+    isLoading: false
+  });
+  const musicSearchRef = useRef<MusicSearchRef>(null);
+  
+  // 3068 书源选择模式喵~
+  const [showSourceSelector, setShowSourceSelector] = useState(false);
+  const [searchBoxTransform, setSearchBoxTransform] = useState({ scale: 1, opacity: 1, borderRadius: '2rem' });
+  
+  // Video-related state 喵~
+  const {
+    videoResults,
+    showVideos,
+    videoPage,
+    videoSortOrder,
+    videoHasMore,
+    isVideoLoading,
+    setVideoSortOrder,
+    fetchVideos,
+    photoFolders,
+    selectedPhotoFolder,
+    photoResults,
+    showPhotos,
+    isPhotoLoading,
+    photoPage,
+    photoHasMore,
+    setSelectedPhotoFolder,
+    fetchPhotoFolders,
+    fetchPhotos,
+    hideMedia,
+  } = useMediaLibrary({ setAppState: setState, setError });
+
+  // Photo-related state喵~
+  const resolvedCoverUrl = resolveCoverUrl(selectedNovel?.coverUrl);
+  
+  // sourceKey is now internal and defaults to 'auto' for unified search
+  const sourceKey = 'auto';
+
+  // Progress Tracking
+  const [progressPercent, setProgressPercent] = useState(0);
+  const [progressMessage, setProgressMessage] = useState('');
+  const searchRequestIdRef = useRef(0);
+  const downloadProgressFrameRef = useRef<number | null>(null);
+  const pendingDownloadProgressRef = useRef<{ message: string; percent: number } | null>(null);
+  const parsingStateShownRef = useRef(false);
+
+  const flushDownloadProgress = useCallback(() => {
+    downloadProgressFrameRef.current = null;
+    const pending = pendingDownloadProgressRef.current;
+    pendingDownloadProgressRef.current = null;
+    if (!pending) return;
+
+    setProgressMessage(pending.message);
+    setProgressPercent(pending.percent);
+    if (pending.percent > 40 && !parsingStateShownRef.current) {
+      parsingStateShownRef.current = true;
+      setState(AppState.PARSING);
+    }
+  }, []);
+
+  const queueDownloadProgress = useCallback((message: string, percent: number) => {
+    pendingDownloadProgressRef.current = { message, percent };
+    if (downloadProgressFrameRef.current === null) {
+      downloadProgressFrameRef.current = window.requestAnimationFrame(flushDownloadProgress);
+    }
+  }, [flushDownloadProgress]);
+
+  const cancelPendingDownloadProgress = useCallback(() => {
+    if (downloadProgressFrameRef.current !== null) {
+      window.cancelAnimationFrame(downloadProgressFrameRef.current);
+      downloadProgressFrameRef.current = null;
+    }
+    pendingDownloadProgressRef.current = null;
+  }, []);
+
+  useEffect(() => cancelPendingDownloadProgress, [cancelPendingDownloadProgress]);
+
+  // Reader State
+  const [readingChapterIndex, setReadingChapterIndex] = useState<number | null>(null);
+
+  // Scroll-to-top state
+  const [showScrollTop, setShowScrollTop] = useState(false);
+  useEffect(() => {
+    const handleScroll = () => {
+      setShowScrollTop(window.scrollY > 400);
+    };
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
+
+  const scrollToTop = useCallback(() => {
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }, []);
+
+  // 处理界面切换
+  const handleViewSwitch = useCallback((view: 'novel' | 'music' | 'manga') => {
+    searchRequestIdRef.current += 1;
+    setActiveView(view);
+    // 重置搜索相关状态
+    setQuery('');
+    setSearchResults([]);
+    setSelectedNovel(null);
+    setError(null);
+    setState(AppState.IDLE);
+  }, []);
+
+  const handleSearch = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if ([AppState.SEARCHING, AppState.ANALYZING, AppState.DOWNLOADING, AppState.PARSING, AppState.PACKING].includes(state)) return;
+    if (!query.trim()) return;
+
+    // 3068 书源选择模式喵~
+    if (query.trim() === '3068') {
+      searchRequestIdRef.current += 1;
+      setQuery('');
+      // 动画：搜索框从两边往中间回缩成圆
+      setSearchBoxTransform({ scale: 0.08, opacity: 0, borderRadius: '50%' });
+      
+      // 等待收缩动画完成后显示书源选择器
+      setTimeout(() => {
+        setShowSourceSelector(true);
+      }, 280);
+      return;
+    }
+
+    const requestId = ++searchRequestIdRef.current;
+    setProgressPercent(0);
+    setProgressMessage('');
+    setState(AppState.SEARCHING);
+    setError(null);
+    setSearchResults([]);
+    setSelectedNovel(null);
+    
+    // zyd 特殊关键词处理喵~
+    if (query.trim().toLowerCase() === 'zyd') {
+      await fetchVideos(1, videoSortOrder);
+      return;
+    }
+
+    // shenli 特殊关键词处理喵~
+    if (query.trim().toLowerCase() === 'shenli') {
+      await fetchPhotoFolders();
+      return;
+    }
+
+    // 正常搜索流程喵~
+    hideMedia();
+    try {
+      const results = await searchNovel(query, sourceKey);
+      if (requestId !== searchRequestIdRef.current) return;
+      if (results.length === 0) {
+        setError("未找到相关小说，请更换关键词或检查小说名是否正确。");
+        setState(AppState.IDLE);
+      } else {
+        setSearchResults(results);
+        setState(AppState.PREVIEW);
+
+        // Background enrich: Fetch descriptions (sequentially to avoid overwhelming server)
+        (async () => {
+          for (const novel of results) {
+            if (requestId !== searchRequestIdRef.current) return;
+            // 如果小说简介不完整，或者是笔趣阁源（通常需要二次抓取），则进行后台补充
+            const needsEnrich = !novel.description || !novel.coverUrl || novel.sourceName?.includes('笔趣阁');
+            
+            if (!needsEnrich) continue;
+            
+            try {
+              const details = await getNovelDetails(novel);
+              if (requestId !== searchRequestIdRef.current) return;
+              setSearchResults(prev => prev.map(n => n.id === novel.id ? { ...n, ...details } : n));
+              // Small delay to be nice to the server
+              await new Promise(r => setTimeout(r, 200));
+            } catch (e) {
+              console.warn("Background enrich failed for", novel.title, e);
+            }
+          }
+        })();
+      }
+    } catch (err: any) {
+      if (requestId !== searchRequestIdRef.current) return;
+      console.error(err);
+      setError(err.message || "搜索服务暂时不可用，请稍后重试。");
+      setState(AppState.IDLE);
+    }
+  };
+
+  const handleSelectNovel = async (novel: Novel) => {
+    setScrollPosition(window.scrollY);
+    setSelectedNovel(novel);
+    // Scroll to top
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+
+    // Auto-fetch details to get description and chapters
+    if (!novel.description || !novel.chapters || novel.chapters.length === 0) {
+      try {
+        console.log(`[App] Auto-fetching details for ${novel.title}喵~`);
+        const detailed = await getNovelDetails(novel);
+        setSelectedNovel(prev => prev && prev.id === novel.id ? detailed : prev);
+      } catch (e) {
+        console.warn("Auto-fetch details failed", e);
+      }
+    }
+  };
+
+  const startDownloadProcess = async () => {
+    if (!selectedNovel) return;
+
+    cancelPendingDownloadProgress();
+    parsingStateShownRef.current = false;
+    setProgressPercent(0);
+    setProgressMessage("\u6b63\u5728\u5206\u6790\u4e66\u7c4d\u4fe1\u606f...");
+    setState(AppState.ANALYZING);
+    setError(null);
+
+    try {
+      // 0. If Local Novel, just download directly
+      if (selectedNovel.sourceName === '本地书库' && selectedNovel.detailUrl) {
+        const a = document.createElement('a');
+        a.href = selectedNovel.detailUrl;
+        a.download = selectedNovel.id; // filename
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        setProgressPercent(100);
+        setProgressMessage("\u4e0b\u8f7d\u5b8c\u6210\uff0c\u5df2\u4fdd\u5b58\u81f3\u4e0b\u8f7d\u76ee\u5f55");
+        setState(AppState.COMPLETE);
+        return;
+      }
+
+      // 1. Get Detailed Metadata & Download Link
+      let novelWithLink = selectedNovel;
+      // Force fetch details if description is missing (likely incomplete data) or chapters are empty
+      if (!novelWithLink.description || !novelWithLink.chapters || novelWithLink.chapters.length === 0) {
+        setProgressMessage("正在分析书籍信息...");
+        setProgressPercent(5);
+        try {
+            novelWithLink = await getNovelDetails(selectedNovel);
+        } catch (e) {
+            console.error("Failed to get details", e);
+            throw new Error("无法获取书籍详情，请稍后重试");
+        }
+      }
+
+      // 2. Download & Parse
+      setState(AppState.DOWNLOADING);
+      const fullNovel = await downloadAndParseNovel(novelWithLink, queueDownloadProgress);
+      cancelPendingDownloadProgress();
+
+      setSelectedNovel(fullNovel); // Update with chapters
+
+      // Update with chapters
+
+      // ... (existing code)
+
+      // 3. Pack EPUB
+      setState(AppState.PACKING);
+      setProgressMessage("正在生成 EPUB 文件...");
+
+      // Try to fetch cover
+      let coverBlob: Blob | undefined;
+      if (fullNovel.coverUrl) {
+        try {
+          setProgressMessage("正在下载封面...");
+          coverBlob = await fetchBlob(fullNovel.coverUrl);
+        } catch (e) {
+          console.warn("Cover download failed", e);
+        }
+      }
+
+      setProgressMessage("正在打包 EPUB...");
+      const epubBlob = await generateEpub(fullNovel, coverBlob);
+
+      const safeTitle = fullNovel.title.replace(/[\\/:*?"<>|]/g, "_") || "download";
+      const filename = `${safeTitle}.epub`;
+
+      // Download Trigger
+      const url = URL.createObjectURL(epubBlob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+
+      setState(AppState.COMPLETE);
+      setProgressMessage("下载完成，已保存至下载目录");
+
+    } catch (e: any) {
+      cancelPendingDownloadProgress();
+      console.error(e);
+      setError(e.message || "处理过程中发生错误");
+      setState(AppState.PREVIEW);
+    }
+  };
+
+  const islandMusicInfo = useMemo(() => activeView === 'music' ? {
+    isPlaying: musicState.isPlaying,
+    currentMusic: musicState.currentMusic,
+    isSearching: musicState.isSearching,
+    isDownloading: musicState.isDownloading,
+    isDownloadComplete: musicState.isDownloadComplete,
+  } : undefined, [activeView, musicState]);
+
+  const handleIslandClick = useCallback(() => {
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    if (state === AppState.PREVIEW || state === AppState.COMPLETE || state === AppState.IDLE) {
+      setSelectedNovel(null);
+      if (state === AppState.COMPLETE) setState(AppState.PREVIEW);
+    }
+  }, [state]);
+
+  return (
+    <div
+      className="min-h-screen relative overflow-x-hidden text-slate-100 pb-20 pt-20 sm:pt-32"
+      style={{
+        paddingTop: 'calc(env(safe-area-inset-top) + 5rem)',
+        paddingBottom: 'calc(env(safe-area-inset-bottom) + 5rem)'
+      }}
+    >
+
+      <DynamicIsland
+        state={state}
+        progress={progressPercent}
+        message={progressMessage}
+        activeView={activeView}
+        musicInfo={islandMusicInfo}
+        onClick={handleIslandClick}
+        onIconClick={handleViewSwitch}
+      />
+
+      {/* Back Button */}
+      {selectedNovel && (
+        <button
+          onClick={() => { 
+            setSelectedNovel(null); 
+            setState(AppState.PREVIEW); 
+            setTimeout(() => window.scrollTo({ top: scrollPosition, behavior: 'smooth' }), 50);
+          }}
+          className="fixed z-40 p-3 bg-black/20 backdrop-blur-xl rounded-full text-white/80 hover:bg-white/10 transition-all border border-white/10 hover:scale-110 active:scale-95 group"
+          style={{
+            top: 'calc(env(safe-area-inset-top) + 1.5rem)',
+            left: 'calc(env(safe-area-inset-left) + 1.5rem)'
+          }}
+          title="返回搜索"
+        >
+          <ChevronLeft size={24} className="group-hover:-translate-x-1 transition-transform" />
+        </button>
+      )}
+
+      {/* Reader Modal */}
+      {selectedNovel && readingChapterIndex !== null && (
+        <Reader
+          title={selectedNovel.title}
+          chapter={selectedNovel.chapters[readingChapterIndex]}
+          onClose={() => setReadingChapterIndex(null)}
+          onNext={() => setReadingChapterIndex(prev => (prev !== null && prev < selectedNovel.chapters.length - 1) ? prev + 1 : prev)}
+          onPrev={() => setReadingChapterIndex(prev => (prev !== null && prev > 0) ? prev - 1 : prev)}
+          hasNext={readingChapterIndex < selectedNovel.chapters.length - 1}
+          hasPrev={readingChapterIndex > 0}
+          isLoading={false}
+        />
+      )}
+
+      <main className="relative max-w-5xl mx-auto px-4 sm:px-6 pt-20 sm:pt-32 flex flex-col items-center min-h-[80vh]">
+
+        {/* 根据 activeView 显示不同界面 */}
+        {activeView === 'music' ? (
+          <MusicSearch ref={musicSearchRef} onStateChange={setMusicState} />
+        ) : activeView === 'manga' ? (
+          <MangaSearch onBack={() => handleViewSwitch('novel')} />
+        ) : (
+          <>
+            {/* Header */}
+            <div className={`text-center ${state !== AppState.IDLE ? 'scale-75 opacity-50 mb-4' : isMobile ? 'mb-8' : 'mb-12'}`} style={{ transition: 'transform 400ms cubic-bezier(0.4,0,0.2,1), opacity 400ms cubic-bezier(0.4,0,0.2,1)' }}>
+              <h1 className={`font-black tracking-tighter text-transparent bg-clip-text bg-gradient-to-b from-white via-white to-white/40 drop-shadow-2xl mb-4 ${isMobile ? 'text-4xl sm:text-5xl' : 'text-6xl md:text-8xl'}`}>
+                InkStream
+              </h1>
+              <p className={`text-white/50 font-light max-w-xl mx-auto flex items-center justify-center gap-2 ${isMobile ? 'text-sm sm:text-base' : 'text-xl'}`}>
+                全网搜书 · 智能分章 · EPUB 打包
+              </p>
+            </div>
+
+            {/* Search Input */}
+            {state !== AppState.DOWNLOADING && state !== AppState.PARSING && state !== AppState.PACKING && !showSourceSelector && (
+              <div className="w-full max-w-2xl z-20 mb-12 flex flex-col items-center gap-6">
+                <form onSubmit={handleSearch} className="w-full relative group">
+                  <div className="search-box-glow group-hover:opacity-40 transition-opacity duration-500"></div>
+                  <div 
+                    className="search-box p-2 flex items-center focus-within:ring-2 focus-within:ring-white/20 focus-within:bg-black/40 gpu-accelerated"
+                    style={{ 
+                      transform: `scale(${searchBoxTransform.scale})`,
+                      opacity: searchBoxTransform.opacity,
+                      borderRadius: searchBoxTransform.borderRadius,
+                      transition: 'transform 300ms cubic-bezier(0.4,0,0.2,1), opacity 300ms cubic-bezier(0.4,0,0.2,1), border-radius 300ms cubic-bezier(0.4,0,0.2,1)',
+                    }}
+                  >
+                    <Search className={isMobile ? "ml-3 text-white/40" : "ml-5 text-white/40"} size={isMobile ? 20 : 24} />
+                    <input
+                      type="text"
+                      name="search"
+                      autoComplete="off"
+                      value={query}
+                      onChange={e => setQuery(e.target.value)}
+                      placeholder="输入小说名"
+                      className={`w-full bg-transparent border-none outline-none ${isMobile ? 'px-3 py-3 text-base' : 'px-4 py-4 text-lg'} text-white placeholder:text-white/20 font-medium`}
+                    />
+
+                    <button
+                      type="submit"
+                      disabled={state === AppState.SEARCHING}
+                      className={`bg-white text-black ${isMobile ? 'px-6 py-2' : 'px-8 py-3'} rounded-[1.5rem] font-bold hover:scale-105 active:scale-95 focus-visible:ring-2 focus-visible:ring-white/50 disabled:opacity-50 disabled:scale-100 gpu-accelerated`}
+                      style={{ transition: 'transform 150ms cubic-bezier(0.4,0,0.2,1), opacity 250ms cubic-bezier(0.4,0,0.2,1)' }}
+                    >
+                      {state === AppState.SEARCHING ? <Loader2 className="animate-spin" size={isMobile ? 16 : 20} /> : <ArrowRight size={isMobile ? 16 : 20} />}
+                    </button>
+                  </div>
+                </form>
+
+                {error && (
+                  <div role="alert" aria-live="polite" className="mt-4 flex flex-col items-center justify-center gap-2 text-red-400 bg-red-900/20 py-3 px-6 rounded-2xl border border-red-500/20 animate-in fade-in max-w-lg mx-auto text-center">
+                    <div className="flex items-center gap-2">
+                      <AlertCircle size={16} />
+                      <span className="text-sm font-medium">{error}</span>
+                    </div>
+                    <span className="text-xs text-red-400/60">如果是网络问题，请尝试点击搜索按钮重试</span>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* 3068 Source Selector Animation 喵~ */}
+            {showSourceSelector && (
+              <div className="w-full max-w-2xl z-20 mb-12 flex flex-col items-center gap-6">
+                <SourceSelector 
+                  onConfirm={() => {
+                    setShowSourceSelector(false);
+                    setSearchBoxTransform({ scale: 1, opacity: 1, borderRadius: '4rem' });
+                  }}
+                  onCancel={() => {
+                    setShowSourceSelector(false);
+                    setSearchBoxTransform({ scale: 1, opacity: 1, borderRadius: '4rem' });
+                  }}
+                />
+              </div>
+            )}
+
+            {/* Selected Novel Detail View */}
+            {selectedNovel && (state === AppState.PREVIEW || state === AppState.ANALYZING || state === AppState.DOWNLOADING || state === AppState.PARSING || state === AppState.PACKING || state === AppState.COMPLETE) && (
+              <div className="w-full mt-4 mb-20 animate-enter-slide-up gpu-accelerated" style={{ willChange: 'transform, opacity' }}>
+                <div className="glass-panel p-8 md:p-12 border border-white/10 relative overflow-hidden">
+
+              {/* Detail Layout */}
+              <div className="flex flex-col md:flex-row gap-12 relative z-10">
+                {/* Cover Mockup */}
+                <div className="w-full md:w-1/3 flex flex-col items-center">
+                  <div className="w-48 aspect-[2/3] bg-gradient-to-br from-indigo-900 to-slate-900 rounded-xl shadow-2xl flex items-center justify-center border border-white/10 mb-8 relative overflow-hidden group">
+                    {resolvedCoverUrl ? (
+                      <img 
+                        src={resolvedCoverUrl} 
+                        alt={selectedNovel.title}
+                        width={192}
+                        height={288}
+                        className="w-full h-full object-cover" 
+                      />
+                    ) : (
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent flex items-center justify-center">
+                        <span className="text-4xl font-serif text-white/20">书</span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Action Button */}
+                  {state === AppState.PREVIEW || state === AppState.COMPLETE ? (
+                    <button
+                      onClick={startDownloadProcess}
+                      className="w-full bg-indigo-600 hover:bg-indigo-500 focus-visible:ring-2 focus-visible:ring-indigo-300 text-white py-4 rounded-2xl font-bold text-lg flex items-center justify-center gap-2 shadow-[0_0_30px_-5px_rgba(79,70,229,0.5)] transition-all hover:scale-[1.02] active:scale-95"
+                    >
+                      <Download size={20} />
+                      {selectedNovel.sourceName === '本地书库' ? "下载本地文件" : (state === AppState.COMPLETE ? "下载完成 (点击再次下载)" : "开始抓取并打包")}
+                    </button>
+                  ) : (
+                    <CuteProgress state={state} progress={progressPercent} message={progressMessage} />
+                  )}
+                  <button
+                    onClick={() => { 
+                      setSelectedNovel(null); 
+                      setState(AppState.PREVIEW); 
+                      setTimeout(() => window.scrollTo({ top: scrollPosition, behavior: 'smooth' }), 50);
+                    }}
+                    className="mt-4 text-white/40 text-sm hover:text-white hover:underline transition-all"
+                  >
+                    返回搜索结果
+                  </button>
+                </div>
+
+                {/* Metadata */}
+                <div className="flex-1 space-y-8">
+                  <div>
+                    <div className="flex items-center gap-3 mb-4">
+                      <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase border ${selectedNovel.status === 'Completed' ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/20' : 'bg-amber-500/20 text-amber-300 border-amber-500/20'}`}>
+                        {selectedNovel.status === 'Completed' ? '已完结' : selectedNovel.status === 'Serializing' ? '连载中' : '未知状态'}
+                      </span>
+                      <span className="bg-indigo-500/20 text-indigo-300 px-2 py-0.5 rounded text-xs border border-indigo-500/20">TXT直连</span>
+                    </div>
+                    <h2 className="text-4xl font-bold text-white mb-2 font-serif">{selectedNovel.title}</h2>
+                    <p className="text-xl text-indigo-200 mb-4">{selectedNovel.author}</p>
+
+                    {/* Tags 喵~ */}
+                    {selectedNovel.tags && selectedNovel.tags.length > 0 && (
+                      <div className="flex flex-wrap gap-2 mb-6">
+                        {selectedNovel.tags.map((tag, i) => (
+                          <span key={i} className="px-3 py-1 rounded-full bg-pink-500/10 text-pink-300 border border-pink-500/20 text-xs font-medium">
+                            {tag}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="prose prose-invert prose-sm text-white/70 max-h-32 overflow-y-auto custom-scrollbar">
+                    <p>{selectedNovel.description || "正在加载简介..."}</p>
+                  </div>
+
+                  <div className="bg-black/20 rounded-2xl p-6 border border-white/5">
+                    <h3 className="text-white font-bold mb-4 flex items-center gap-2">
+                      <Globe size={16} className="text-indigo-400" />
+                      数据来源
+                    </h3>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-white/40 bg-white/5 px-3 py-1.5 rounded-lg flex flex-wrap gap-2">
+                        {selectedNovel.sourceName?.split(' | ').map((s, i) => (
+                          <span key={i} className="text-indigo-300 bg-indigo-500/10 px-2 py-0.5 rounded border border-indigo-500/20">{s}</span>
+                        )) || '未知书源'}
+                      </span>
+                      <span className="text-xs text-emerald-400/60">
+                        已验证可用
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Chapter Preview - Only visible after parsing */}
+                  {selectedNovel.chapters.length > 0 && (
+                    <div className="animate-in fade-in duration-500">
+                      <h3 className="text-white font-bold mb-4 flex items-center gap-2">
+                        <FileText size={16} className="text-indigo-400" />
+                        章节列表 (共 {selectedNovel.chapters.length} 章)
+                      </h3>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-[300px] overflow-y-auto pr-2 custom-scrollbar">
+                        {selectedNovel.chapters.slice(0, 50).map((c, idx) => (
+                          <button
+                            key={`${c.url}-${idx}`}
+                            onClick={() => setReadingChapterIndex(idx)}
+                            className="flex items-center justify-between p-3 rounded-xl bg-white/5 border border-white/5 text-sm text-white/80 hover:bg-white/10 transition-colors text-left"
+                          >
+                            <span className="truncate">{c.title}</span>
+                            <CheckCircle2 size={14} className="text-emerald-500 shrink-0" />
+                          </button>
+                        ))}
+                        {selectedNovel.chapters.length > 50 && (
+                          <div className="col-span-full text-center text-xs text-white/30 py-2">
+                            ... 剩余 {selectedNovel.chapters.length - 50} 章 ...
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Search Results List (Grid) */}
+        {!selectedNovel && searchResults.length > 0 && (
+          <div className={`w-full grid ${isMobile ? 'grid-cols-1' : 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3'} gap-6 animate-enter-slide-up`}>
+            {searchResults.map((item, idx) => (
+              <BookCard key={`${item.id}-${idx}-${item.sourceName}`} novel={item} onSelect={handleSelectNovel} />
+            ))}
+          </div>
+        )}
+
+        {/* 视频加载进度喵... */}
+        {isVideoLoading && videoResults.length === 0 && (
+          <div className="w-full py-20 flex flex-col items-center gap-6 animate-in fade-in duration-500">
+            <div className="w-16 h-16 border-4 border-pink-500/20 border-t-pink-500 rounded-full animate-spin" />
+            <p className="text-pink-400 font-bold">正在整理视频库喵...</p>
+          </div>
+        )}
+
+        {/* 相册加载进度喵... */}
+        {isPhotoLoading && photoResults.length === 0 && photoFolders.length === 0 && (
+          <div className="w-full py-20 flex flex-col items-center gap-6 animate-in fade-in duration-500">
+            <div className="w-16 h-16 border-4 border-blue-500/20 border-t-blue-500 rounded-full animate-spin" />
+            <p className="text-blue-400 font-bold">正在打开相册喵...</p>
+          </div>
+        )}
+
+        {/* Video Results List (Grid)喵~ */}
+        {!selectedNovel && showVideos && videoResults.length > 0 && (
+          <div className="w-full space-y-12 animate-enter-fade">
+            {/* 排序和统计工具栏喵~ */}
+            <div className="flex flex-col md:flex-row items-center justify-between gap-4 bg-white/5 backdrop-blur-md p-6 rounded-3xl border border-white/10">
+              <div className="flex items-center gap-4">
+                <div className="p-3 bg-indigo-500/20 rounded-2xl text-indigo-400">
+                  <Video size={24} />
+                </div>
+                <div>
+                  <h3 className="text-white font-bold">本地视频库</h3>
+                  <p className="text-xs text-white/40">共发现 {videoResults.length} 个精彩片段喵~</p>
+                </div>
+              </div>
+              
+              <div className="flex items-center gap-2 bg-black/20 p-1.5 rounded-2xl border border-white/5">
+                <button
+                  onClick={() => {
+                    const newSort = 'desc';
+                    setVideoSortOrder(newSort);
+                    fetchVideos(1, newSort);
+                  }}
+                  className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${videoSortOrder === 'desc' ? 'bg-white text-black shadow-lg' : 'text-white/40 hover:text-white'}`}
+                >
+                  最新在前
+                </button>
+                <button
+                  onClick={() => {
+                    const newSort = 'asc';
+                    setVideoSortOrder(newSort);
+                    fetchVideos(1, newSort);
+                  }}
+                  className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${videoSortOrder === 'asc' ? 'bg-white text-black shadow-lg' : 'text-white/40 hover:text-white'}`}
+                >
+                  最旧在前
+                </button>
+              </div>
+            </div>
+
+            {/* 按时间分组展示喵~ */}
+            {groupVideosByTime(videoResults).map((group) => (
+              <div key={group.label} className="space-y-6">
+                <div className="flex items-center gap-4">
+                  <div className="h-[1px] flex-1 bg-gradient-to-r from-transparent to-white/10" />
+                  <span className="text-sm font-bold text-white/30 uppercase tracking-widest px-4 py-1 rounded-full border border-white/5 bg-white/5">
+                    {group.label}
+                  </span>
+                  <div className="h-[1px] flex-1 bg-gradient-to-l from-transparent to-white/10" />
+                </div>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {group.videos.map((video, idx) => (
+                    <VideoCard key={`${video.filename}-${idx}`} video={video} />
+                  ))}
+                </div>
+              </div>
+            ))}
+
+            {/* 加载更多按钮喵~ */}
+            {videoHasMore && (
+              <div className="flex justify-center pt-8">
+                <button
+                  onClick={() => fetchVideos(videoPage + 1, videoSortOrder, true)}
+                  disabled={isVideoLoading}
+                  className="group relative px-12 py-4 bg-white/5 hover:bg-white/10 border border-white/10 rounded-2xl text-white font-bold transition-all hover:scale-105 active:scale-95 disabled:opacity-50 disabled:scale-100 overflow-hidden"
+                >
+                  <div className="relative z-10 flex items-center gap-3">
+                    {isVideoLoading ? (
+                      <Loader2 size={20} className="animate-spin text-indigo-400" />
+                    ) : (
+                      <Play size={18} className="text-indigo-400 rotate-90" />
+                    )}
+                    <span>{isVideoLoading ? "正在努力加载喵..." : "展开更多精彩喵~"}</span>
+                  </div>
+                  <div className="absolute inset-0 bg-gradient-to-r from-indigo-500/10 to-purple-500/10 opacity-0 group-hover:opacity-100 transition-opacity" />
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Photo Results List喵~ */}
+        {!selectedNovel && showPhotos && (
+          <div className="w-full space-y-8 animate-in fade-in slide-in-from-bottom-5">
+            {/* Header / Breadcrumbs */}
+            <div className="flex items-center justify-between bg-white/5 backdrop-blur-md p-6 rounded-3xl border border-white/10">
+              <div className="flex items-center gap-4">
+                <div className="p-3 bg-blue-500/20 rounded-2xl text-blue-400">
+                  <ImageIcon size={24} />
+                </div>
+                <div>
+                  <h3 className="text-white font-bold">我的相册</h3>
+                  <div className="flex items-center gap-2 text-xs text-white/40">
+                    <span className="hover:text-white/60 cursor-pointer" onClick={() => setSelectedPhotoFolder(null)}>全部相册</span>
+                    {selectedPhotoFolder && (
+                      <>
+                        <ChevronRight size={12} />
+                        <span className="text-white/80">{selectedPhotoFolder}</span>
+                      </>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Folders List (when no folder is selected) */}
+            {!selectedPhotoFolder && (
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+                {photoFolders.map((folder) => (
+                  <div 
+                    key={folder.name}
+                    onClick={() => fetchPhotos(folder.name, 1)}
+                    className="group relative glass-panel p-6 rounded-3xl cursor-pointer transition-all duration-300 hover:scale-105 hover:bg-white/10 border border-white/10"
+                  >
+                    <div className="flex flex-col items-center gap-4">
+                      <div className="relative">
+                        <Folder size={64} className="text-blue-400/80 group-hover:text-blue-400 transition-colors" />
+                        <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                          <Play size={20} className="text-white fill-white" />
+                        </div>
+                      </div>
+                      <div className="text-center">
+                        <h4 className="text-white font-bold truncate w-full px-2">{folder.name}</h4>
+                        <p className="text-xs text-white/40 mt-1">{folder.time.split('T')[0]}</p>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Photos Grid (when a folder is selected) */}
+            {selectedPhotoFolder && (
+              <div className="space-y-8">
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+                  {photoResults.map((photo, idx) => (
+                    <div 
+                      key={`${photo.filename}-${idx}`}
+                      className="group relative aspect-square rounded-2xl overflow-hidden bg-white/5 border border-white/10 hover:border-blue-500/50 transition-all duration-300"
+                    >
+                      <img 
+                        src={photo.url} 
+                        alt={photo.filename} 
+                        loading="lazy"
+                        className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
+                      />
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-end p-3">
+                        <p className="text-[10px] text-white/80 truncate">{photo.filename}</p>
+                      </div>
+                      <div className="absolute top-2 right-2 p-1.5 bg-black/40 backdrop-blur-md rounded-lg opacity-0 group-hover:opacity-100 transition-opacity">
+                        <Maximize2 size={14} className="text-white" />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Load More for Photos */}
+                {photoHasMore && (
+                  <div className="flex justify-center pt-8">
+                    <button
+                      onClick={() => fetchPhotos(selectedPhotoFolder, photoPage + 1, true)}
+                      disabled={isPhotoLoading}
+                      className="group relative px-10 py-3 bg-white/5 hover:bg-white/10 border border-white/10 rounded-2xl text-white font-bold transition-all"
+                    >
+                      <div className="relative z-10 flex items-center gap-3">
+                        {isPhotoLoading ? (
+                          <Loader2 size={20} className="animate-spin text-blue-400" />
+                        ) : (
+                          <ImageIcon size={18} className="text-blue-400" />
+                        )}
+                        <span>{isPhotoLoading ? "加载中..." : "查看更多照片"}</span>
+                      </div>
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* No Videos Found 喵~ */}
+        {!selectedNovel && showVideos && videoResults.length === 0 && (
+          <div className="flex flex-col items-center justify-center py-20 text-white/40">
+            <Video size={48} className="mb-4 opacity-20" />
+            <p className="text-lg">video 文件夹里空空如也，什么都没发现喵~</p>
+          </div>
+        )}
+      </>
+      )}
+
+      </main>
+
+      {/* 回到顶部按钮 */}
+      {showScrollTop && (
+        <button
+          onClick={scrollToTop}
+          className="fixed z-40 bottom-8 right-8 p-4 bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 text-white rounded-full shadow-2xl shadow-purple-500/40 hover:shadow-purple-500/60 transition-all duration-300 hover:scale-110 active:scale-95 gpu-accelerated animate-scale-in"
+          aria-label="回到顶部"
+          style={{
+            willChange: 'transform, opacity',
+            transform: 'translateZ(0)',
+          }}
+        >
+          <ArrowUp size={20} />
+        </button>
+      )}
+
+    </div>
+  );
+}
