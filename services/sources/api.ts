@@ -17,6 +17,7 @@ import { aliceswProvider } from './providers/alicesw';
 import { localProvider } from './providers/local';
 import { shukugeProvider } from './providers/shukuge';
 import { bqguiProvider } from './providers/bqgui';
+import { qbwxProvider } from './providers/qbwx';
 
 export const searchNovel = async (keyword: string, source: any = 'auto', respectConfig: boolean = true): Promise<Novel[]> => {
   // Check if keyword is a URL
@@ -153,6 +154,7 @@ const getProviderByName = (name: string): SourceProvider | undefined => {
   if (name.includes('顶点小说网')) return dingdianProvider;
   if (name.includes('笔趣阁')) return bqguiProvider;
   if (name.includes('爱丽丝')) return aliceswProvider;
+  if (name.includes('全本文学') || name.includes('qbwx')) return qbwxProvider;
   return undefined;
 };
 

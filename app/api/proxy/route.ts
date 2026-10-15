@@ -125,6 +125,17 @@ const requestWithTimeout = (
     }
   });
 
+/**
+ * 证书过期的站点降级到 http 重试喵~
+ *
+ * 实例：www.shukuge.com 的 https 证书 2021-12-24 就过期了，
+ * 但同一路径的 http 完全可用。很多老牌小说站都有这个问题。
+ */
+const isCertError = (e: unknown): boolean => {
+  const msg = String((e as Error)?.message || e || '');
+  return /certificate|CERT_|SSL|TLS|self.signed|expired/i.test(msg);
+};
+
 async function fetchWithTimeout(url: string, options: RequestInit, timeout = TIMEOUT_MS): Promise<Response> {
   let currentUrl = new URL(url);
   let currentOptions: RequestInit = { ...options };
@@ -132,7 +143,20 @@ async function fetchWithTimeout(url: string, options: RequestInit, timeout = TIM
   for (let redirectCount = 0; redirectCount <= MAX_REDIRECTS; redirectCount++) {
     await validateTarget(currentUrl);
     let response: Response;
-    response = await requestWithTimeout(currentUrl, currentOptions, timeout);
+    try {
+      response = await requestWithTimeout(currentUrl, currentOptions, timeout);
+    } catch (e) {
+      // https 证书异常 → 降级到 http 再试一次喵~
+      if (currentUrl.protocol === 'https:' && isCertError(e)) {
+        const fallback = new URL(currentUrl.toString());
+        fallback.protocol = 'http:';
+        console.warn(`[Proxy] TLS failed for ${currentUrl.hostname}, retrying over http`);
+        await validateTarget(fallback);
+        response = await requestWithTimeout(fallback, currentOptions, timeout);
+      } else {
+        throw e;
+      }
+    }
 
     if (![301, 302, 303, 307, 308].includes(response.status)) return response;
     if (redirectCount === MAX_REDIRECTS) throw new Error('Too many redirects');

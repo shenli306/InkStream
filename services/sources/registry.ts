@@ -9,8 +9,9 @@ import type { SourceProvider } from './shared/types';
 import { shukugeProvider } from './providers/shukuge';
 import { bqguiProvider } from './providers/bqgui';
 import { localProvider } from './providers/local';
+import { qbwxProvider } from './providers/qbwx';
 
-export const PROVIDERS: SourceProvider[] = [shukugeProvider, bqguiProvider, localProvider];
+export const PROVIDERS: SourceProvider[] = [shukugeProvider, bqguiProvider, qbwxProvider, localProvider];
 export const SOURCE_UNAVAILABLE_REASONS: Readonly<Record<string, string>> = {
   '完本阁': '域名不可达',
   '顶点小说网': '原域名 DNS 已失效',
@@ -18,6 +19,7 @@ export const SOURCE_UNAVAILABLE_REASONS: Readonly<Record<string, string>> = {
 };
 export const SOURCE_DESCRIPTIONS: Readonly<Record<string, string>> = {
   '本地书库': '仅搜索已添加的本地文件',
+  '全本文学': '男频 / 女频全本小说，支持全文下载',
 };
 // 书源启用/禁用配置喵~ (所有书源均已启用)
 export const SOURCE_ENABLED_CONFIG: Record<string, boolean> = {
@@ -26,6 +28,7 @@ export const SOURCE_ENABLED_CONFIG: Record<string, boolean> = {
   '顶点小说网': false,
   '笔趣阁(GUI)': true,
   '爱丽丝书屋': false,
+  '全本文学': true,
   '本地书库': true
 };
 
