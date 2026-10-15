@@ -20,7 +20,7 @@
 
 ## 🚀 快速开始
 
-需要 **Node.js 20+**（`package.json` 的 `engines` 声明 20.x）。
+需要 **Node.js 22.x**（`package.json` 的 `engines` 声明；Vercel 已停用 Node 20）。
 
 ```bash
 # 1. 安装依赖
@@ -43,13 +43,11 @@ npm run dev
 | 命令 | 作用 |
 |---|---|
 | `npm run dev` | 开发服务器，热更新 |
-| `npm run build` | 生产构建（= `next build --turbopack`） |
+| `npm run build` | 生产构建 |
 | `npm run start` | 运行生产构建产物（需先 build） |
 | `npm run lint` | `next lint` |
 
-> ⚠️ **构建必须走 Turbopack。** 在 Node 22+ / 26 上，Next 15 内置的 webpack 会报
-> `WebpackError is not a constructor` 直接构建失败。`--turbopack` 没这个问题，所以
-> `build` 脚本里已经写死了这个参数，直接 `npm run build` 即可。
+> 📌 **Node 版本要求 22.x。** 见 `package.json` 的 `engines` 字段，Vercel 20.x 已停用。
 
 ## 🗂️ 项目结构
 
