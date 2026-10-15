@@ -1,0 +1,254 @@
+import { lookup } from 'node:dns/promises';
+import { isIP } from 'node:net';
+import { NextRequest } from 'next/server';
+
+// 由原 api/proxy.js 直接移植：SSRF 校验 + 重定向跟随 + 反爬检测 +
+// HTML 相对 URL 改写。保持逻辑与注释原样。喵~
+export const runtime = 'nodejs';
+export const maxDuration = 30;
+export const dynamic = 'force-dynamic';
+
+const TIMEOUT_MS = 12000;
+const MAX_BODY_SIZE = 1024 * 1024;
+const MAX_REDIRECTS = 5;
+
+function isPrivateIp(address: string): boolean {
+  const normalized = address.toLowerCase().replace(/^::ffff:/, '');
+  if (isIP(normalized) === 4) {
+    const [a, b] = normalized.split('.').map(Number);
+    return a === 0 || a === 10 || a === 127 ||
+      (a === 100 && b >= 64 && b <= 127) ||
+      (a === 169 && b === 254) ||
+      (a === 172 && b >= 16 && b <= 31) ||
+      (a === 192 && (b === 0 || b === 168)) ||
+      (a === 198 && (b === 18 || b === 19)) ||
+      a >= 224;
+  }
+  return normalized === '::' || normalized === '::1' ||
+    normalized.startsWith('fc') || normalized.startsWith('fd') ||
+    /^fe[89ab]/.test(normalized);
+}
+
+async function validateTarget(url: URL): Promise<void> {
+  if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password) {
+    throw new Error('Invalid target URL');
+  }
+  const hostname = url.hostname.toLowerCase();
+  if (hostname === 'localhost' || hostname.endsWith('.localhost') || isPrivateIp(hostname)) {
+    throw new Error('Target host is not allowed');
+  }
+  const addresses = await lookup(hostname, { all: true, verbatim: true });
+  if (!addresses.length || addresses.some(({ address }) => isPrivateIp(address))) {
+    throw new Error('Target host is not allowed');
+  }
+}
+
+async function fetchWithTimeout(url: string, options: RequestInit, timeout = TIMEOUT_MS): Promise<Response> {
+  let currentUrl = new URL(url);
+  let currentOptions: RequestInit = { ...options };
+
+  for (let redirectCount = 0; redirectCount <= MAX_REDIRECTS; redirectCount++) {
+    await validateTarget(currentUrl);
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeout);
+    let response: Response;
+    try {
+      response = await fetch(currentUrl, {
+        ...currentOptions,
+        redirect: 'manual',
+        signal: controller.signal,
+      });
+    } finally {
+      clearTimeout(timeoutId);
+    }
+
+    if (![301, 302, 303, 307, 308].includes(response.status)) return response;
+    if (redirectCount === MAX_REDIRECTS) throw new Error('Too many redirects');
+
+    const location = response.headers.get('location');
+    if (!location) return response;
+    currentUrl = new URL(location, currentUrl);
+    if (response.status === 303 || ((response.status === 301 || response.status === 302) && currentOptions.method === 'POST')) {
+      currentOptions = { ...currentOptions, method: 'GET', body: undefined };
+    }
+  }
+
+  throw new Error('Too many redirects');
+}
+
+async function getRequestBody(req: NextRequest): Promise<Buffer | undefined> {
+  if (req.method !== 'POST') return undefined;
+  const ab = await req.arrayBuffer();
+  if (ab.byteLength === 0) return undefined;
+  const body = Buffer.from(ab);
+  if (body.length > MAX_BODY_SIZE) throw new Error('Request body too large');
+  return body;
+}
+
+const CORS: Record<string, string> = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization, User-Agent, Referer',
+};
+
+export async function OPTIONS() {
+  return new Response(null, { status: 204, headers: CORS });
+}
+
+export async function GET(req: NextRequest) {
+  return handle(req);
+}
+
+export async function POST(req: NextRequest) {
+  return handle(req);
+}
+
+async function handle(req: NextRequest): Promise<Response> {
+  const sp = req.nextUrl.searchParams;
+  try {
+    const targetUrl = sp.get('url');
+    const customReferer = sp.get('referer');
+
+    if (!targetUrl) {
+      return Response.json({ error: 'Invalid url parameter' }, { status: 400, headers: CORS });
+    }
+
+    const urlStr = String(targetUrl);
+    const urlObj = new URL(urlStr);
+    await validateTarget(urlObj);
+    const requestBody = await getRequestBody(req);
+
+    // 构造浏览器化的请求头喵~
+    let finalReferer = customReferer;
+    const finalOrigin = urlObj.origin;
+    const isMobileUA = urlStr.includes('jizai22.com') || urlStr.includes('b.faloo.com');
+
+    if (!finalReferer) finalReferer = urlObj.origin + '/';
+
+    const desktopUA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36';
+    const mobileUA = 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1';
+    const clientUA = req.headers.get('user-agent');
+
+    const headers: Record<string, string> = {
+      'User-Agent': clientUA || (isMobileUA ? mobileUA : desktopUA),
+      'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+      'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8,en-US;q=0.7',
+      'Accept-Encoding': 'gzip, deflate, br',
+      'Referer': finalReferer,
+      'Cache-Control': 'no-cache',
+      'Pragma': 'no-cache',
+      'Upgrade-Insecure-Requests': '1',
+      'Sec-Fetch-Dest': 'document',
+      'Sec-Fetch-Mode': 'navigate',
+      'Sec-Fetch-Site': 'same-origin',
+      'Sec-Fetch-User': '?1',
+    };
+
+    if (finalOrigin) headers['Origin'] = finalOrigin;
+    const ct = req.headers.get('content-type');
+    if (req.method === 'POST' && ct) headers['Content-Type'] = ct;
+
+    let lastError: Error | null = null;
+    let finalResponse: Response | null = null;
+    let finalBuffer: Buffer | null = null;
+
+    try {
+      const response = await fetchWithTimeout(urlStr, {
+        headers,
+        method: req.method,
+        body: requestBody as any,
+      });
+
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+
+      const buffer = Buffer.from(await response.arrayBuffer());
+      if (buffer.length < 50) throw new Error('Response too small');
+
+      // 检查是否是反爬页面
+      const textSample = buffer.toString('utf-8', 0, 2000).toLowerCase();
+      if (
+        textSample.includes('just a moment') ||
+        textSample.includes('attention required') ||
+        textSample.includes('cloudflare') ||
+        textSample.includes('verification') ||
+        textSample.includes('请完成安全验证') ||
+        textSample.includes('正在检测') ||
+        textSample.includes('error 403') ||
+        textSample.includes('forbidden') ||
+        textSample.includes('blocked')
+      ) {
+        throw new Error('Anti-bot page detected');
+      }
+
+      finalResponse = response;
+      finalBuffer = buffer;
+    } catch (e: any) {
+      lastError = e;
+      console.log(`[Proxy] Attempt failed for ${urlStr.substring(0, 80)}: ${e.message}`);
+    }
+
+    if (lastError || !finalResponse || !finalBuffer) {
+      const msg = lastError?.message || 'Proxy failed';
+      console.error(`[Proxy] All attempts failed for ${urlStr.substring(0, 80)}: ${msg}`);
+      return Response.json({ error: `Proxy failed: ${msg}` }, { status: 502, headers: CORS });
+    }
+
+    const contentType = String(finalResponse.headers.get('content-type') || '');
+    const contentTypeLower = contentType.toLowerCase();
+    const isImage = contentTypeLower.startsWith('image/');
+    const isHtml = contentTypeLower.includes('text/html') || contentTypeLower.includes('application/xhtml');
+
+    // 重要：把 HTML 中的相对 URL 转换为原始域的绝对 URL
+    // 否则前端 DOMParser 解析时会把相对 URL 解析成我们的 Vercel 域，导致后续 fetch 详情页失败喵~
+    if (isHtml && finalBuffer) {
+      try {
+        const htmlText = finalBuffer.toString('utf-8');
+        if (htmlText.includes('//' + urlObj.host + '/') || htmlText.includes('="/') || htmlText.includes("='/")) {
+          const httpsOrigin = 'https://' + urlObj.host;
+          const fixedHtml = htmlText
+            .replace(/src="\/([^"]*?)"/g, `src="${httpsOrigin}/$1"`)
+            .replace(/src='\/([^']*?)'/g, `src='${httpsOrigin}/$1'`)
+            .replace(/href="\/([^"]*?)"/g, `href="${httpsOrigin}/$1"`)
+            .replace(/href='\/([^']*?)'/g, `href='${httpsOrigin}/$1'`)
+            .replace(/srcset="\/([^"]*?)"/g, `srcset="${httpsOrigin}/$1"`)
+            .replace(/srcset='\/([^']*?)'/g, `srcset='${httpsOrigin}/$1'`)
+            .replace(/action="\/([^"]*?)"/g, `action="${httpsOrigin}/$1"`)
+            .replace(/action='\/([^']*?)'/g, `action='${httpsOrigin}/$1'`);
+          if (fixedHtml !== htmlText) finalBuffer = Buffer.from(fixedHtml, 'utf-8');
+        }
+      } catch {
+        // URL 重写失败不影响正常返回
+      }
+    }
+
+    const outHeaders = new Headers(CORS);
+    if (contentType) outHeaders.set('Content-Type', contentType);
+    if (isImage) outHeaders.set('Cache-Control', 'public, max-age=604800, immutable');
+
+    finalResponse.headers.forEach((value, key) => {
+      const lowerKey = key.toLowerCase();
+      if (
+        lowerKey === 'content-encoding' ||
+        lowerKey === 'content-length' ||
+        lowerKey === 'transfer-encoding' ||
+        lowerKey === 'connection' ||
+        lowerKey === 'keep-alive' ||
+        lowerKey === 'upgrade' ||
+        lowerKey === 'content-security-policy' ||
+        lowerKey === 'strict-transport-security' ||
+        lowerKey === 'x-frame-options'
+      ) return;
+      if (lowerKey.startsWith('access-control-')) return;
+      if (lowerKey === 'content-type' || lowerKey === 'cache-control') return;
+      outHeaders.set(key, value);
+    });
+
+    return new Response(new Uint8Array(finalBuffer), {
+      status: finalResponse.status || 200,
+      headers: outHeaders,
+    });
+  } catch (error: any) {
+    console.error('[Proxy] Final error:', error.message);
+    return Response.json({ error: error.message }, { status: 500, headers: CORS });
+  }
+}

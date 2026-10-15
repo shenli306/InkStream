@@ -57,7 +57,10 @@ export class SmartSelector {
       // Node.js 环境：使用 JSDOM
       let JSDOM: any;
       try {
-        JSDOM = require('jsdom').JSDOM;
+        // 用间接 require 让打包器（Turbopack/webpack）不做静态解析，
+        // 从而不把 jsdom 拉进客户端 bundle；客户端走下方 DOMParser fallback。
+        const req = eval('require');
+        JSDOM = req('jsdom').JSDOM;
       } catch {
         // 浏览器 fallback：使用 DOMParser
         const parser = new DOMParser();

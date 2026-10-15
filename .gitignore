@@ -1,0 +1,23 @@
+# deps
+node_modules
+
+# next
+/.next/
+/out/
+next-env.d.ts
+
+# build cache
+*.tsbuildinfo
+
+# runtime data
+/downloads/
+/video/
+/Photo album/
+
+# env
+.env*.local
+.env
+
+# misc
+.DS_Store
+*.log
