@@ -47,3 +47,7 @@ Issues 托管在 GitHub Issues。See `docs/agents/issue-tracker.md`.
 
 ### Productivity
 - `/caveman` — 超压缩通信模式，减少 75% token 使用
+
+## 环境配置
+
+- Git/GitHub 认证方式见 `docs/git-auth.md`（SSH 密钥 ed25519，账号 shenli306）。
