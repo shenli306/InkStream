@@ -12,7 +12,6 @@ import { localProvider } from './providers/local';
 
 export const PROVIDERS: SourceProvider[] = [shukugeProvider, bqguiProvider, localProvider];
 export const SOURCE_UNAVAILABLE_REASONS: Readonly<Record<string, string>> = {
-  '书库阁': '站点当前不可稳定访问',
   '完本阁': '域名不可达',
   '顶点小说网': '原域名 DNS 已失效',
   '爱丽丝书屋': '站点连接持续超时',
@@ -23,7 +22,7 @@ export const SOURCE_DESCRIPTIONS: Readonly<Record<string, string>> = {
 // 书源启用/禁用配置喵~ (所有书源均已启用)
 export const SOURCE_ENABLED_CONFIG: Record<string, boolean> = {
   '完本阁': true,
-  '书库阁': false,
+  '书库阁': true,
   '顶点小说网': false,
   '笔趣阁(GUI)': true,
   '爱丽丝书屋': false,

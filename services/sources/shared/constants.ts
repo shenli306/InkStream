@@ -9,8 +9,8 @@ export const BASE_URL = 'https://www.jizai22.com'; // Fallback
 export const SHIJIEMINGZHU_URL = 'https://www.shijiemingzhu.com';
 export const SHUKUGE_URL = 'http://www.shukuge.com';
 export const DINGDIAN_URL = 'https://www.23ddw.net';
-export const BQGUI_URL = 'https://www.bqgui.cc';
-export const BQGUI_HOSTS = new Set(['www.bqgui.cc', 'bqgui.cc']);
+export const BQGUI_URL = 'https://www.bqgicq.cc';
+export const BQGUI_HOSTS = new Set(['www.bqgicq.cc', 'bqgicq.cc', 'www.bqgui.cc', 'bqgui.cc']);
 export const ALICESW_URL = 'https://www.alicesw.com';
 
 /** 搜索缓存：避免重复请求，5 分钟过期喵~ */

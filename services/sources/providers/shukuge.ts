@@ -33,11 +33,14 @@ export const shukugeProvider: SourceProvider = {
       const items = doc.querySelectorAll('.listitem');
       
       items.forEach(item => {
-        const titleEl = item.querySelector('h2 a') as HTMLAnchorElement;
-        if (!titleEl) return;
-        
+        // 站点结构：<a href="/book/ID/" title="..."><h2>书名</h2></a>
+        // h2 是 a 的子元素，不是反过来；所以标题取 h2、链接取它的父级 a 喵~
+        const titleEl = item.querySelector('h2') as HTMLElement | null;
+        const linkEl = (titleEl?.closest('a') || item.querySelector('.bookdesc a')) as HTMLAnchorElement | null;
+        if (!titleEl || !linkEl) return;
+
         const title = cleanShukugeTitle(titleEl.textContent?.trim() || "");
-        const href = titleEl.getAttribute('href') || "";
+        const href = linkEl.getAttribute('href') || "";
         const authorMatch = item.querySelector('.bookdesc')?.textContent?.match(/作者：(.*?)(?=\s|分类|$)/);
         const author = authorMatch ? authorMatch[1].trim() : "未知";
         

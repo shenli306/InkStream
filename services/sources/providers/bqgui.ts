@@ -8,6 +8,51 @@ import { parseHTML } from '../shared/dom';
 import { fetchText, proxifyImage } from '../shared/fetcher';
 import { isRelevant } from '../shared/relevance';
 
+
+/**
+ * 解析 bqgicq 的 JSON 搜索接口喵~
+ *
+ * 接口形如 /user/search.html?q= 返回：
+ *   [{ url_list, url_img, articlename, author, intro, ... }, ...]
+ * 注意：接口在无会话时可能只返回 "1"，解析失败时返回空数组由上层回退。
+ */
+const parseBqguiJson = (raw: string, keyword: string): Novel[] => {
+  let data: unknown;
+  try {
+    data = JSON.parse(raw);
+  } catch {
+    return [];
+  }
+  if (!Array.isArray(data)) return [];
+
+  const results: Novel[] = [];
+  data.forEach((entry: any) => {
+    const title = String(entry?.articlename || '').trim();
+    const href = String(entry?.url_list || '').trim();
+    if (!title || !href) return;
+
+    const author = String(entry?.author || '未知').trim();
+    if (!isRelevant(title, author, keyword)) return;
+
+    const detailUrl = href.startsWith('http') ? href : `${BQGUI_URL}${href}`;
+    const cover = String(entry?.url_img || '').trim();
+
+    results.push({
+      id: detailUrl,
+      title,
+      author,
+      description: String(entry?.intro || '').trim(),
+      coverUrl: cover ? proxifyImage(cover.startsWith('http') ? cover : `${BQGUI_URL}${cover}`) : '',
+      tags: [],
+      status: 'Unknown',
+      chapters: [],
+      sourceName: '笔趣阁(GUI)',
+      detailUrl,
+    });
+  });
+  return results;
+};
+
 export const bqguiProvider: SourceProvider = {
   key: 'bqgui',
   name: '笔趣阁(GUI)',
@@ -15,16 +60,34 @@ export const bqguiProvider: SourceProvider = {
   search: async (keyword: string): Promise<Novel[]> => {
     console.log(`[Bqgui] Searching for: ${keyword}喵~`);
     
-    // 1. 尝试直接搜索 (Vercel 环境下最可靠的方式)
+    // 1. 走站点自己的 JSON 搜索接口喵~
+    //    /s?q= 只是骨架页，结果由 loadmore() 用 $.getJSON 异步拉取，
+    //    所以必须直接请求 /user/search.html，否则拿到的永远是"加载中……"。
+    //    接口格式：[{ url_list, url_img, articlename, author, intro }, ...]
     try {
+        const apiUrl = `${BQGUI_URL}/user/search.html?q=${encodeURIComponent(keyword)}`;
+        const referer = `${BQGUI_URL}/s?q=${encodeURIComponent(keyword)}`;
+
+        let results: Novel[] = [];
+        try {
+            // 注意：不要带 X-Requested-With —— 自定义头会触发 CORS preflight，
+            // 而 /api/proxy 的转发只发 GET，preflight 拿不到允许头就会失败喵~
+            const raw = await fetchText(apiUrl, {
+                headers: { Referer: referer },
+            });
+            results = parseBqguiJson(raw, keyword);
+        } catch (jsonError) {
+            console.warn('[Bqgui] JSON search endpoint failed, falling back to page scrape喵~', jsonError);
+        }
+
+        if (results.length > 0) return results;
+
+        // 2. 回退：抓 /s?q= 页面本身（站点若改回服务端渲染仍能命中）喵~
         const searchUrl = `${BQGUI_URL}/s?q=${encodeURIComponent(keyword)}`;
         // 笔趣阁可能返回 302 跳转到详情页，或者返回搜索列表
         // 我们的 fetchText 会自动跟随重定向
         const html = await fetchText(searchUrl);
         const doc = parseHTML(html);
-        
-        const results: Novel[] = [];
-        
         // 检查是否直接跳转到了详情页 (笔趣阁特性)
         const metaOgType = doc.querySelector('meta[property="og:type"]')?.getAttribute('content');
         if (metaOgType === 'novel') {

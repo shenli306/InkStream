@@ -2,44 +2,23 @@
  * HTTP 抓取与代理 URL 构造喵~
  *
  * 请求策略（见 getRequestUrls）：
- *   1. 本地开发 → 走 vite 时代的 /proxy/<site> 中间件
- *   2. 其它     → 走 /api/proxy
- *   3. 兜底     → 直连目标站
+ *   1. 跨域 → 走 /api/proxy（本地与生产统一）
+ *   2. 兜底 → 直连目标站
  */
 import type { Novel } from '../../../types';
 
 import { WANBENGE_URL } from './constants';
-
-/**
- * 本地开发时的站点代理路径映射喵~
- * 生产环境统一走 /api/proxy。
- */
-const LOCAL_PROXY_PATHS = new Map<string, string>([
-  ['www.jizai22.com', '/proxy/wanbenge'],
-  ['jizai22.com', '/proxy/wanbenge'],
-  ['www.shukuge.com', '/proxy/shukuge'],
-  ['shukuge.com', '/proxy/shukuge'],
-  ['www.23ddw.net', '/proxy/dingdian'],
-  ['23ddw.net', '/proxy/dingdian'],
-  ['www.alicesw.com', '/proxy/alicesw'],
-  ['alicesw.com', '/proxy/alicesw'],
-  ['www.bqgui.cc', '/proxy/bqgui'],
-  ['bqgui.cc', '/proxy/bqgui']
-]);
 
 export const getRequestUrls = (targetUrl: string): string[] => {
   if (typeof window === 'undefined') return [targetUrl];
 
   const target = new URL(targetUrl);
   const sameOrigin = target.origin === window.location.origin;
-  const isLocalhost = ['localhost', '127.0.0.1', '::1'].includes(window.location.hostname);
-  const localProxyPath = LOCAL_PROXY_PATHS.get(target.hostname);
   const apiProxyUrl = `/api/proxy?url=${encodeURIComponent(targetUrl)}`;
-  const proxyUrl = isLocalhost && localProxyPath
-    ? `${localProxyPath}${target.pathname}${target.search}${target.hash}`
-    : apiProxyUrl;
 
-  return sameOrigin ? [targetUrl] : [proxyUrl, targetUrl];
+  // Next.js 迁移后 vite 时代的 /proxy/<site> 中间件已不存在，
+  // 本地与生产统一走 /api/proxy 喵~
+  return sameOrigin ? [targetUrl] : [apiProxyUrl, targetUrl];
 };
 
 export const fetchText = async (url: string, options?: RequestInit, encoding = 'utf-8'): Promise<string> => {

@@ -1,5 +1,8 @@
 import { lookup } from 'node:dns/promises';
 import { isIP } from 'node:net';
+import http from 'node:http';
+import https from 'node:https';
+import zlib from 'node:zlib';
 import { NextRequest } from 'next/server';
 
 // 由原 api/proxy.js 直接移植：SSRF 校验 + 重定向跟随 + 反爬检测 +
@@ -43,24 +46,93 @@ async function validateTarget(url: URL): Promise<void> {
   }
 }
 
+/**
+ * 用 node:http / node:https 发请求，而不是全局 fetch 喵~
+ *
+ * 为什么不用 fetch：undici（Node 内置的 fetch 实现）的客户端指纹
+ * 会被部分站点的 WAF 识别。实测 bqgicq.cc 对 undici 无论带什么 header
+ * 都只返回 1 字节 "1"，而同样 IP、同样 header 用 node:https 就能拿到
+ * 55700 字节的正常 JSON。换成 node:https 后恢复正常。
+ */
+const requestWithTimeout = (
+  target: URL,
+  options: RequestInit,
+  timeout: number
+): Promise<Response> =>
+  new Promise((resolve, reject) => {
+    const isHttps = target.protocol === 'https:';
+    const transport = isHttps ? https : http;
+
+    const req = transport.request(
+      {
+        protocol: target.protocol,
+        hostname: target.hostname,
+        port: target.port || (isHttps ? 443 : 80),
+        path: `${target.pathname}${target.search}`,
+        method: options.method || 'GET',
+        headers: (options.headers as Record<string, string>) || {},
+        timeout,
+      },
+      res => {
+        const chunks: Buffer[] = [];
+        res.on('data', (chunk: Buffer) => chunks.push(chunk));
+        res.on('end', () => {
+          const raw = Buffer.concat(chunks);
+          const encoding = String(res.headers['content-encoding'] || '').toLowerCase();
+
+          // node 的 http/https 不会自动解压，需要手动处理喵~
+          let body: Buffer;
+          try {
+            if (encoding === 'gzip') body = zlib.gunzipSync(raw);
+            else if (encoding === 'br') body = zlib.brotliDecompressSync(raw);
+            else if (encoding === 'deflate') body = zlib.inflateSync(raw);
+            else body = raw;
+          } catch {
+            body = raw;
+          }
+
+          const headers = new Headers();
+          Object.entries(res.headers).forEach(([key, value]) => {
+            if (value === undefined) return;
+            // content-encoding 已手动解压，必须移除，否则下游会二次解压喵~
+            if (key.toLowerCase() === 'content-encoding') return;
+            if (Array.isArray(value)) value.forEach(v => headers.append(key, v));
+            else headers.set(key, String(value));
+          });
+
+          resolve(
+            new Response(body, {
+              status: res.statusCode || 502,
+              statusText: res.statusMessage,
+              headers,
+            })
+          );
+        });
+      }
+    );
+
+    req.on('timeout', () => req.destroy(new Error('Request timeout')));
+    req.on('error', reject);
+
+    const body = options.body;
+    if (body && typeof (body as any).pipe === 'function') {
+      (body as any).pipe(req);
+    } else if (body) {
+      req.write(body);
+      req.end();
+    } else {
+      req.end();
+    }
+  });
+
 async function fetchWithTimeout(url: string, options: RequestInit, timeout = TIMEOUT_MS): Promise<Response> {
   let currentUrl = new URL(url);
   let currentOptions: RequestInit = { ...options };
 
   for (let redirectCount = 0; redirectCount <= MAX_REDIRECTS; redirectCount++) {
     await validateTarget(currentUrl);
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), timeout);
     let response: Response;
-    try {
-      response = await fetch(currentUrl, {
-        ...currentOptions,
-        redirect: 'manual',
-        signal: controller.signal,
-      });
-    } finally {
-      clearTimeout(timeoutId);
-    }
+    response = await requestWithTimeout(currentUrl, currentOptions, timeout);
 
     if (![301, 302, 303, 307, 308].includes(response.status)) return response;
     if (redirectCount === MAX_REDIRECTS) throw new Error('Too many redirects');
@@ -127,10 +199,16 @@ async function handle(req: NextRequest): Promise<Response> {
 
     const desktopUA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36';
     const mobileUA = 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1';
-    const clientUA = req.headers.get('user-agent');
+
+    // 只有真实浏览器的 UA 才透传喵~
+    // curl / node-fetch 这类 UA 会被被代理站点当成爬虫直接挡掉
+    // （实测 bqgicq.cc 对 "curl/8.22.0" 只返回 1 字节 "1"，对浏览器 UA 返回 55KB JSON）。
+    const clientUA = req.headers.get('user-agent') || '';
+    const isBrowserUA = /Mozilla\/5\.0/.test(clientUA);
+    const effectiveUA = isBrowserUA ? clientUA : (isMobileUA ? mobileUA : desktopUA);
 
     const headers: Record<string, string> = {
-      'User-Agent': clientUA || (isMobileUA ? mobileUA : desktopUA),
+      'User-Agent': effectiveUA,
       'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
       'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8,en-US;q=0.7',
       'Accept-Encoding': 'gzip, deflate, br',
@@ -162,22 +240,29 @@ async function handle(req: NextRequest): Promise<Response> {
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
 
       const buffer = Buffer.from(await response.arrayBuffer());
-      if (buffer.length < 50) throw new Error('Response too small');
 
-      // 检查是否是反爬页面
-      const textSample = buffer.toString('utf-8', 0, 2000).toLowerCase();
-      if (
-        textSample.includes('just a moment') ||
-        textSample.includes('attention required') ||
-        textSample.includes('cloudflare') ||
-        textSample.includes('verification') ||
-        textSample.includes('请完成安全验证') ||
-        textSample.includes('正在检测') ||
-        textSample.includes('error 403') ||
-        textSample.includes('forbidden') ||
-        textSample.includes('blocked')
-      ) {
-        throw new Error('Anti-bot page detected');
+      // 反爬启发式只适用于 HTML 文档喵~
+      // JSON / 纯文本接口常常只有几个字节（例如笔趣阁的 /user/search.html
+      // 在无会话时返回 "1"），按 HTML 的最小体积门槛会被误杀成 502。
+      const contentType = response.headers.get('content-type') || '';
+      const looksHtml = contentType.includes('html') || contentType === '';
+      if (looksHtml) {
+        if (buffer.length < 50) throw new Error('Response too small');
+
+        const textSample = buffer.toString('utf-8', 0, 2000).toLowerCase();
+        if (
+          textSample.includes('just a moment') ||
+          textSample.includes('attention required') ||
+          textSample.includes('cloudflare') ||
+          textSample.includes('verification') ||
+          textSample.includes('请完成安全验证') ||
+          textSample.includes('正在检测') ||
+          textSample.includes('error 403') ||
+          textSample.includes('forbidden') ||
+          textSample.includes('blocked')
+        ) {
+          throw new Error('Anti-bot page detected');
+        }
       }
 
       finalResponse = response;
