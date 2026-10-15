@@ -9,7 +9,40 @@
 import type { Novel } from '../../../types';
 
 import { WANBENGE_URL } from './constants';
-const fetchText = async (url: string, options?: RequestInit, encoding = 'utf-8'): Promise<string> => {
+
+/**
+ * 本地开发时的站点代理路径映射喵~
+ * 生产环境统一走 /api/proxy。
+ */
+const LOCAL_PROXY_PATHS = new Map<string, string>([
+  ['www.jizai22.com', '/proxy/wanbenge'],
+  ['jizai22.com', '/proxy/wanbenge'],
+  ['www.shukuge.com', '/proxy/shukuge'],
+  ['shukuge.com', '/proxy/shukuge'],
+  ['www.23ddw.net', '/proxy/dingdian'],
+  ['23ddw.net', '/proxy/dingdian'],
+  ['www.alicesw.com', '/proxy/alicesw'],
+  ['alicesw.com', '/proxy/alicesw'],
+  ['www.bqgui.cc', '/proxy/bqgui'],
+  ['bqgui.cc', '/proxy/bqgui']
+]);
+
+export const getRequestUrls = (targetUrl: string): string[] => {
+  if (typeof window === 'undefined') return [targetUrl];
+
+  const target = new URL(targetUrl);
+  const sameOrigin = target.origin === window.location.origin;
+  const isLocalhost = ['localhost', '127.0.0.1', '::1'].includes(window.location.hostname);
+  const localProxyPath = LOCAL_PROXY_PATHS.get(target.hostname);
+  const apiProxyUrl = `/api/proxy?url=${encodeURIComponent(targetUrl)}`;
+  const proxyUrl = isLocalhost && localProxyPath
+    ? `${localProxyPath}${target.pathname}${target.search}${target.hash}`
+    : apiProxyUrl;
+
+  return sameOrigin ? [targetUrl] : [proxyUrl, targetUrl];
+};
+
+export const fetchText = async (url: string, options?: RequestInit, encoding = 'utf-8'): Promise<string> => {
   if (url.startsWith('/')) {
     console.log(`[Fetch] Local request: ${url}喵~`);
     const response = await fetch(url, options);
@@ -93,7 +126,7 @@ export const fetchBlob = async (url: string): Promise<Blob> => {
   }
 };
 
-const isUrl = (str: string) => {
+export const isUrl = (str: string) => {
     try {
         new URL(str);
         return true;
@@ -102,7 +135,7 @@ const isUrl = (str: string) => {
     }
 };
 
-const proxifyImage = (url: string) => {
+export const proxifyImage = (url: string) => {
   if (!url) return '';
   
   if (url.startsWith('/api/proxy?url=')) return url;
@@ -129,7 +162,7 @@ const proxifyImage = (url: string) => {
   return `/api/proxy?url=${encodeURIComponent(url)}`;
 };
 
-const isPlaceholderCoverUrl = (url: string) => {
+export const isPlaceholderCoverUrl = (url: string) => {
   if (!url) return true;
   let decoded = url;
   try {
