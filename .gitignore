@@ -10,6 +10,7 @@ next-env.d.ts
 *.tsbuildinfo
 
 # runtime data
+/output/
 /downloads/
 /video/
 /Photo album/
