@@ -530,7 +530,7 @@ body {
         100% { transform: translate(var(--tx), var(--ty)) scale(0); opacity: 0; }
       }
 
-/* ===== animations.css ===== */
+/* ===== 动画系统（原 animations.css，已内联）===== */
 /* =============================
    InkStream 统一动画系统
    基于 iOS 灵动岛风格缓动曲线

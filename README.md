@@ -113,8 +113,10 @@ lib/                        工具（下载目录解析等）
 ## 📖 文档
 
 - `docs/git-auth.md` — 本机 Git / GitHub 认证方式
+- `docs/source-vercel-options.md` — 书源在 Vercel 上可用的方案对比
+- `docs/lightpillar-analysis.md` — LightPillar 光柱组件技术分析
 - `CLAUDE.md` — 项目 agent 技能与约定
-- `CODE_WIKI.md` · `CONTEXT.md` · `DIAGNOSTIC_GUIDE.md`
+- `CONTEXT.md` — 项目领域术语表
 
 ## 📄 License
 
