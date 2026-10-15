@@ -1,17 +1,18 @@
 import React, { memo, useCallback, useEffect, useRef, useState } from 'react';
-import { Check, Trash2, Upload } from 'lucide-react';
+import { Check } from 'lucide-react';
 import {
   SOURCE_ENABLED_CONFIG,
-  importLegadoSources,
-  loadLegadoSources,
   loadSourceConfig,
   PROVIDERS,
-  removeLegadoSource,
   SOURCE_DESCRIPTIONS,
   setSourceEnabled,
   SOURCE_UNAVAILABLE_REASONS,
 } from '../services/source';
+import { SpotlightCard } from './reactbits/SpotlightCard';
+import { AnimatedContent } from './reactbits/AnimatedContent';
+import { ClickSpark } from './reactbits/ClickSpark';
 import '../source-selector.css';
+import './reactbits/reactbits.css';
 
 interface SourceSelectorProps {
   onConfirm: () => void;
@@ -22,11 +23,9 @@ type AnimationPhase = 'entering' | 'open' | 'closing';
 
 const getInitialSources = () => {
   loadSourceConfig();
-  const importedNames = new Set(loadLegadoSources().map(source => source.bookSourceName));
   return PROVIDERS.map(provider => ({
     name: provider.name,
     enabled: SOURCE_ENABLED_CONFIG[provider.name] !== false,
-    imported: importedNames.has(provider.name),
     unavailableReason: SOURCE_UNAVAILABLE_REASONS[provider.name],
     description: SOURCE_DESCRIPTIONS[provider.name],
   }));
@@ -35,10 +34,8 @@ const getInitialSources = () => {
 const SourceSelectorComponent: React.FC<SourceSelectorProps> = ({ onConfirm, onCancel }) => {
   const [sources, setSources] = useState(getInitialSources);
   const [phase, setPhase] = useState<AnimationPhase>('entering');
-  const [importError, setImportError] = useState('');
   const closingRef = useRef(false);
   const closeTimerRef = useRef<number | null>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     const frame = window.requestAnimationFrame(() => setPhase('open'));
@@ -73,24 +70,6 @@ const SourceSelectorComponent: React.FC<SourceSelectorProps> = ({ onConfirm, onC
     }));
   }, []);
 
-  const importSource = useCallback(async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    event.target.value = '';
-    if (!file) return;
-    try {
-      importLegadoSources(await file.text());
-      setSources(getInitialSources());
-      setImportError('');
-    } catch (error) {
-      setImportError(error instanceof Error ? error.message : '书源导入失败');
-    }
-  }, []);
-
-  const removeSource = useCallback((name: string) => {
-    removeLegadoSource(name);
-    setSources(getInitialSources());
-  }, []);
-
   const isOpen = phase === 'open';
   const isClosing = phase === 'closing';
 
@@ -101,18 +80,20 @@ const SourceSelectorComponent: React.FC<SourceSelectorProps> = ({ onConfirm, onC
     >
       <div className="source-selector__ambient" aria-hidden="true" />
 
-      <button
-        type="button"
-        className="source-selector__confirm"
-        onClick={() => close(onConfirm)}
-        disabled={isClosing}
-        aria-label="确认书源配置"
-        title="确认书源配置"
-      >
-        <span className="source-selector__confirm-core">
-          <Check size={22} aria-hidden="true" />
-        </span>
-      </button>
+      <ClickSpark sparkCount={10} sparkRadius={34} sparkColor="#a5b4fc">
+        <button
+          type="button"
+          className="source-selector__confirm"
+          onClick={() => close(onConfirm)}
+          disabled={isClosing}
+          aria-label="确认书源配置"
+          title="确认书源配置"
+        >
+          <span className="source-selector__confirm-core">
+            <Check size={22} aria-hidden="true" />
+          </span>
+        </button>
+      </ClickSpark>
 
       <div className="source-selector__rail source-selector__rail--top" aria-hidden="true" />
       <div className="source-selector__rail source-selector__rail--bottom" aria-hidden="true" />
@@ -127,12 +108,17 @@ const SourceSelectorComponent: React.FC<SourceSelectorProps> = ({ onConfirm, onC
             <div className="flex-1 h-px bg-gradient-to-l from-transparent via-pink-500/50 to-pink-500/20" />
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-            {sources.map((source, index) => (
-              <div
+          <AnimatedContent
+            className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3"
+            stagger={45}
+            distance={22}
+            direction="up"
+          >
+            {sources.map((source) => (
+              <SpotlightCard
                 key={source.name}
-                className="source-selector__item flex items-center justify-between px-4 py-3.5 rounded-xl border border-white/5 bg-white/[0.04] hover:bg-white/[0.07] hover:border-indigo-500/30"
-                style={{ '--source-item-delay': `${Math.min(index * 35, 175)}ms` } as React.CSSProperties}
+                className="source-selector__item flex items-center justify-between px-4 py-3.5 rounded-xl border border-white/5 bg-white/[0.04] hover:border-indigo-500/30 transition-colors"
+                spotlightRadius={180}
               >
                 <div className="flex items-center gap-3 min-w-0">
                   <span className={`source-selector__status ${source.enabled ? 'source-selector__status--enabled' : ''}`} />
@@ -146,18 +132,6 @@ const SourceSelectorComponent: React.FC<SourceSelectorProps> = ({ onConfirm, onC
                   </span>
                 </div>
                 <div className="flex items-center gap-2">
-                  {source.imported && (
-                    <button
-                      type="button"
-                      onClick={() => removeSource(source.name)}
-                      className="source-selector__remove"
-                      aria-label={`删除${source.name}`}
-                      title="删除导入书源"
-                      disabled={!isOpen}
-                    >
-                      <Trash2 size={15} aria-hidden="true" />
-                    </button>
-                  )}
                   <button
                     type="button"
                     onClick={() => toggleSource(source.name)}
@@ -169,30 +143,13 @@ const SourceSelectorComponent: React.FC<SourceSelectorProps> = ({ onConfirm, onC
                     <span className="source-selector__toggle-knob" />
                   </button>
                 </div>
-              </div>
+              </SpotlightCard>
             ))}
-          </div>
+          </AnimatedContent>
 
           <div className="mt-5 flex flex-wrap items-center justify-center gap-3">
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept=".json,application/json"
-              onChange={importSource}
-              className="sr-only"
-            />
-            <button
-              type="button"
-              onClick={() => fileInputRef.current?.click()}
-              className="source-selector__import"
-              disabled={!isOpen}
-            >
-              <Upload size={15} aria-hidden="true" />
-              导入阅读书源
-            </button>
             <span className="text-xs text-white/40">点击左侧光圈确认</span>
           </div>
-          {importError && <p role="alert" className="mt-3 text-center text-xs text-rose-300">{importError}</p>}
         </div>
       </div>
     </div>

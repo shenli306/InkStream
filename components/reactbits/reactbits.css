@@ -1,0 +1,129 @@
+/**
+ * react-bits 风格组件的样式喵~
+ *
+ * 全部零依赖：只用 CSS 变量 + keyframes，
+ * 不引入 framer-motion / gsap 等动画引擎。
+ * 缓动曲线复用 app/globals.css 里已定义的 --ease-* 令牌。
+ */
+
+/* ============ SpotlightCard ============ */
+.spotlight-card {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+}
+
+.spotlight-card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  opacity: var(--spotlight-opacity, 0);
+  transition: opacity 300ms var(--ease-standard, cubic-bezier(0.4, 0, 0.2, 1));
+  background: radial-gradient(
+    var(--spotlight-radius, 220px) circle at var(--spotlight-x, 50%) var(--spotlight-y, 50%),
+    var(--spotlight-color, rgba(99, 102, 241, 0.25)),
+    transparent 70%
+  );
+}
+
+/* 内容压在光斑之上喵~ */
+.spotlight-card > * {
+  position: relative;
+  z-index: 1;
+}
+
+/* ============ AnimatedContent ============ */
+.animated-content > * {
+  opacity: 0;
+  transform: translate3d(
+    calc(var(--ac-dx, 0) * var(--ac-distance, 18px)),
+    calc(var(--ac-dy, 1) * var(--ac-distance, 18px)),
+    0
+  );
+  transition:
+    opacity 420ms var(--ease-decelerate, cubic-bezier(0, 0, 0.2, 1)),
+    transform 480ms var(--ease-spring, cubic-bezier(0.34, 1.56, 0.64, 1));
+  will-change: opacity, transform;
+}
+
+.animated-content--visible > * {
+  opacity: 1;
+  transform: translate3d(0, 0, 0);
+}
+
+/* 依次错开入场喵~ */
+.animated-content--visible > *:nth-child(1) { transition-delay: 0ms; }
+.animated-content--visible > *:nth-child(2) { transition-delay: var(--ac-stagger, 40ms); }
+.animated-content--visible > *:nth-child(3) { transition-delay: calc(var(--ac-stagger, 40ms) * 2); }
+.animated-content--visible > *:nth-child(4) { transition-delay: calc(var(--ac-stagger, 40ms) * 3); }
+.animated-content--visible > *:nth-child(5) { transition-delay: calc(var(--ac-stagger, 40ms) * 4); }
+.animated-content--visible > *:nth-child(6) { transition-delay: calc(var(--ac-stagger, 40ms) * 5); }
+.animated-content--visible > *:nth-child(7) { transition-delay: calc(var(--ac-stagger, 40ms) * 6); }
+.animated-content--visible > *:nth-child(8) { transition-delay: calc(var(--ac-stagger, 40ms) * 7); }
+.animated-content--visible > *:nth-child(9) { transition-delay: calc(var(--ac-stagger, 40ms) * 8); }
+
+/* ============ ClickSpark ============ */
+/**
+ * ClickSpark 必须对布局完全透明喵~
+ *
+ * 它只是给子元素挂点击火花，不能改变子元素的位置/尺寸，
+ * 也不能成为子元素的包含块 —— 否则 `.source-selector__confirm`
+ * 这种 `position:absolute; left:0` 的定位会以它为参照而错位。
+ * 所以用 display:contents：盒子本身不产生任何布局，
+ * 但 .click-spark__layer 仍需要有一个定位上下文，故由子元素自行提供。
+ */
+.click-spark {
+  display: contents;
+}
+
+/* 火花层挂在触发按钮内部（由 JSX 传入的锚点定位）喵~ */
+.click-spark__layer {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  overflow: visible;
+  z-index: 60;
+}
+
+.click-spark__particle {
+  position: absolute;
+  width: 4px;
+  height: 4px;
+  margin: -2px 0 0 -2px;
+  border-radius: 9999px;
+  background: var(--spark-color, #818cf8);
+  box-shadow: 0 0 6px var(--spark-color, #818cf8);
+  animation: click-spark-fly 600ms var(--ease-decelerate, cubic-bezier(0, 0, 0.2, 1)) forwards;
+}
+
+@keyframes click-spark-fly {
+  0% {
+    opacity: 1;
+    transform: rotate(var(--spark-angle, 0deg)) translateX(0) scale(1);
+  }
+  70% {
+    opacity: 0.85;
+  }
+  100% {
+    opacity: 0;
+    transform: rotate(var(--spark-angle, 0deg)) translateX(var(--spark-radius, 28px)) scale(0.2);
+  }
+}
+
+/* 尊重降低动效偏好喵~ */
+@media (prefers-reduced-motion: reduce) {
+  .spotlight-card::before {
+    transition: none;
+  }
+  .animated-content > * {
+    opacity: 1;
+    transform: none;
+    transition: none;
+  }
+  .click-spark__particle {
+    animation: none;
+    opacity: 0;
+  }
+}
