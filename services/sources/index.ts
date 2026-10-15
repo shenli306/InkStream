@@ -26,9 +26,6 @@ export {
   SOURCE_ENABLED_CONFIG,
   setSourceEnabled,
   loadSourceConfig,
-  loadLegadoSources,
-  importLegadoSources,
-  removeLegadoSource,
 } from './registry';
 
 // 公共 API
