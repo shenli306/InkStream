@@ -1995,8 +1995,12 @@ const aliceswProvider: SourceProvider = {
     
     const cleanTitle = (title: string) => {
       return title
-        .replace(/^\d+[\.\、\s《]+/, '')
-        .replace(/^\d+[\.\、\s]+/, '')
+        // 去掉形如 "1." / "2、" / "3 " 的序号前缀，以及紧跟的《
+        .replace(/^\s*\d+\s*[\.\、\:\：\)\]]\s*/, '')
+        .replace(/^\s*\d+\s+/, '')
+        .replace(/^《\s*/, '')
+        // 去掉结尾的 》
+        .replace(/\s*》$/, '')
         .trim();
     };
     

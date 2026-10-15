@@ -369,14 +369,22 @@ function parseAliceswResults(html, keyword) {
     const aMatch = h.match(/<a[^>]+href=["']([^"']+)["'][^>]*>([^<]+)<\/a>/i);
     if (aMatch) {
       const href = aMatch[1];
-      const rawTitle = aMatch[2].trim().replace(/^\d+[\.\、\s《]+/, '');
-      const title = rawTitle.replace(/^《|》$/g, '').trim();
+      const rawTitle = aMatch[2].trim()
+        .replace(/^\s*\d+\s*[\.\、\:\：\)\]]\s*/, '')
+        .replace(/^\s*\d+\s+/, '')
+        .replace(/^《\s*/, '');
+      const title = rawTitle.replace(/\s*》$/, '').trim();
       if ((href.includes('/novel/') || href.includes('/book/')) && title.length >= 2) {
         if (title.toLowerCase().includes(kwLower) || kwLower.includes(title.toLowerCase().substring(0, 3))) {
           if (!results.some(r => r.detailUrl === href)) {
-            // 尝试从父容器找作者
+            // 作者在标题 <h*> 的兄弟节点 <p> 里（.list-group-item 结构），
+            // 需要在 <h*> 之后的 HTML 片段中查找，而不是之前的。
             let author = '未知';
-            const authorMatch = h.match(/作者[:：]\s*([^\s<]+)/i) || html.substring(html.indexOf(h) - 200, html.indexOf(h)).match(/作者[:：]\s*([^\s<,，]+)/i);
+            const hIdx = html.indexOf(h);
+            const after = hIdx >= 0 ? html.substring(hIdx + h.length, hIdx + h.length + 400) : '';
+            const authorMatch = h.match(/作者[:：]\s*([^\s<,，]+)/i)
+              || after.match(/作者[:：]\s*([^\s<,，]+)/i)
+              || html.substring(Math.max(0, hIdx - 200), hIdx < 0 ? 0 : hIdx).match(/作者[:：]\s*([^\s<,，]+)/i);
             if (authorMatch) author = authorMatch[1].trim();
             results.push({ title, author, coverUrl: '', detailUrl: href, description: '' });
           }
