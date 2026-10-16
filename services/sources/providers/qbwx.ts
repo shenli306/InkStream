@@ -42,15 +42,17 @@ async function postSearch(keyword: string): Promise<string> {
 
 /**
  * 解码 qbwx 的正文混淆喵~
- * 页面里是 document.writeln(qsbs.bb('BASE64'))，按出现顺序拼接再解码。
+ *
+ * 站点有 **两种** 正文格式，必须都处理：
+ *   格式 A（混淆，VIP 章节）：document.writeln(qsbs.bb('BASE64'))，按出现顺序拼接再解码
+ *   格式 B（明文，公众/感言章节）：<div id="content"><div id="booktxt"><p>…</p></div></div>
+ *     —— 实测作者感言、月票章节、更新通知这类「公众章节」不套混淆层，
+ *        直接就是 <p> 段落。只认格式 A 会把它们全部丢成空串（曾误判为「内容过短」）。
  */
 export function decodeQbwxContent(html: string): string {
   const blocks = html.match(/qsbs\.bb\('([A-Za-z0-9+/=]+)'\)/g) || [];
   if (blocks.length === 0) {
-    // 没有混淆时，退回普通正文容器
-    const fallback = html.match(/id="content"[^>]*>([\s\S]*?)<\/div>/);
-    if (!fallback) return '';
-    return fallback[1].replace(/<[^>]+>/g, '').replace(/&nbsp;/g, ' ').trim();
+    return decodeQbwxPlainContent(html);
   }
 
   let decoded = '';
@@ -67,11 +69,69 @@ export function decodeQbwxContent(html: string): string {
     }
   }
 
-  return decoded
+  const cleaned = cleanQbwxHtml(decoded);
+  // 混淆块解出来为空（站点换了格式）时，也别直接放弃，试试明文容器喵~
+  return cleaned || decodeQbwxPlainContent(html);
+}
+
+/** 格式 B：从 <div id="booktxt"> / <div id="content"> 抽明文段落喵~ */
+function decodeQbwxPlainContent(html: string): string {
+  // 优先 booktxt（真正的正文容器），退回 content（外层壳）喵~
+  for (const id of ['booktxt', 'content', 'chaptercontent', 'nr']) {
+    const start = html.search(new RegExp(`<div[^>]*id=["']${id}["'][^>]*>`, 'i'));
+    if (start === -1) continue;
+
+    const openTagEnd = html.indexOf('>', start);
+    if (openTagEnd === -1) continue;
+
+    // 不能依赖 </div> 的第一个匹配——正文里还嵌着别的 div 喵~
+    // 所以做一次「同层开合计数」，找到真正配对的收尾喵~
+    const body = sliceBalancedDiv(html, start, openTagEnd);
+    const cleaned = cleanQbwxHtml(body);
+    if (cleaned) return cleaned;
+  }
+  return '';
+}
+
+/**
+ * 从 startIndex 处的 <div> 开始，按开合计数切出与该 div 配对的全部内容喵~
+ * 只数 div，不看别的标签（正文里不会有未闭合的 div）喵~
+ */
+function sliceBalancedDiv(html: string, startIndex: number, openTagEnd: number): string {
+  let depth = 1;
+  let cursor = openTagEnd + 1;
+  const divRe = /<div\b[^>]*>|<\/div\s*>/gi;
+  divRe.lastIndex = cursor;
+
+  let m: RegExpExecArray | null;
+  while ((m = divRe.exec(html)) !== null) {
+    if (m[0].slice(0, 2) === '</') {
+      depth--;
+      if (depth === 0) return html.slice(cursor, m.index);
+    } else {
+      depth++;
+    }
+  }
+  // 没配平就退回到切片末尾，总比丢干净好喵~
+  return html.slice(cursor);
+}
+
+/** 把正文 HTML 洗成纯文本段落喵~ */
+function cleanQbwxHtml(raw: string): string {
+  return raw
+    .replace(/<script[\s\S]*?<\/script>/gi, '')
+    .replace(/<style[\s\S]*?<\/style>/gi, '')
+    // 站点在公众章节里会插「本章未完，点击下一页继续阅读」和收藏提示喵~
+    .replace(/本章未完[，,]?\s*点击下一页继续阅读/g, '')
+    .replace(/喜欢.{0,20}?请大家?收藏[：:]?[^<]*/g, '')
     .replace(/<br\s*\/?>/gi, '\n')
     .replace(/<\/p>/gi, '\n')
     .replace(/<[^>]+>/g, '')
     .replace(/&nbsp;/g, ' ')
+    .replace(/&ldquo;/g, '“').replace(/&rdquo;/g, '”')
+    .replace(/&lt;/g, '<').replace(/&gt;/g, '>')
+    .replace(/&amp;/g, '&')
+    .replace(/[ \t]+/g, ' ')
     .replace(/\n{3,}/g, '\n\n')
     .trim();
 }

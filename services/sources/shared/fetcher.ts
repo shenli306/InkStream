@@ -8,6 +8,7 @@
 import type { Novel } from '../../../types';
 
 import { WANBENGE_URL } from './constants';
+import { acquireHostSlot, acquireGlobalSlot, hostOf } from './ratelimit';
 
 export const getRequestUrls = (targetUrl: string): string[] => {
   if (typeof window === 'undefined') return [targetUrl];
@@ -44,6 +45,12 @@ export const fetchText = async (url: string, options?: RequestInit, encoding = '
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 15000);
 
+    // 全局限流 + 按 host 串行闸门喵~
+    // 浏览器端才需要（Node 端没有并发连接数限制，也不该被 UI 拖慢）喵~
+    const isBrowser = typeof window !== 'undefined';
+    const releaseGlobal = isBrowser ? await acquireGlobalSlot() : () => {};
+    const releaseHost = isBrowser ? await acquireHostSlot(hostOf(targetUrl) || 'unknown') : () => {};
+
     try {
       const target = new URL(targetUrl);
       const headers = {
@@ -74,6 +81,8 @@ export const fetchText = async (url: string, options?: RequestInit, encoding = '
       console.warn(`Request failed for ${targetUrl}:`, error);
     } finally {
       clearTimeout(timeoutId);
+      releaseHost();
+      releaseGlobal();
     }
   }
 

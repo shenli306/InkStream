@@ -11,6 +11,7 @@ import { searchCache, CACHE_DURATION } from './shared/constants';
 import { cleanupSearchCache } from './shared/cache';
 import { isRelevant } from './shared/relevance';
 import { isUrl } from './shared/fetcher';
+import { setMaxInflight } from './shared/ratelimit';
 import { wanbengeProvider } from './providers/wanbenge';
 import { dingdianProvider } from './providers/dingdian';
 import { aliceswProvider } from './providers/alicesw';
@@ -213,14 +214,22 @@ export const downloadAndParseNovel = async (novel: Novel, onProgress: (msg: stri
     onProgress(`准备下载 ${novel.chapters.length} 章...`, 0);
 
     // 完本阁对频率限制非常严格，所以我们要慢一点喵~
-    // 笔趣阁等其他源通常可以承受更高的并发喵~
+    // 真实节流已经下沉到 shared/ratelimit.ts（按 host 串行 + 最小间隔）喵~
+    // 这里的 concurrency 只是「同时排队的章节数」，不是同时在途的请求数——
+    // 在途数量由 ratelimit 的全局闸门（默认 6）和 host 闸门共同决定喵~
     const isWanbenge = name.includes('完本阁');
     const isBqgui = name.includes('笔趣阁') || name.includes('bqgui');
-    
-    // 完本阁维持 2，笔趣阁提升到 20，其他源提升到 10 喵~
+
+    // 完本阁维持 2，笔趣阁 20，其他源 10 喵~
     const concurrency = isWanbenge ? 2 : (isBqgui ? 20 : 10);
     console.log(`[Download] Starting download with concurrency: ${concurrency} for ${name}喵~`);
-    
+
+    // 全局在途上限：并发越高，越要压住在途请求数喵~
+    // 完本阁 / 全本文学这种整本 1000+ 章的，压到 4 更安全喵~
+    const isQbwx = name.includes('全本文学') || name.includes('qbwx');
+    setMaxInflight(isWanbenge ? 2 : (isQbwx ? 4 : 6));
+    console.log(`[Download] Global in-flight cap: ${isWanbenge ? 2 : (isQbwx ? 4 : 6)}喵~`);
+
     const limit = pLimit(concurrency); 
     let completed = 0;
     let failedCount = 0;
