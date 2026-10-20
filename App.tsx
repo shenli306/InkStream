@@ -452,7 +452,7 @@ export default function App() {
                 </form>
 
                 {error && (
-                  <div role="alert" aria-live="polite" className="mt-4 flex flex-col items-center justify-center gap-2 text-state-danger bg-state-danger/10 py-3 px-6 rounded-lg border border-state-danger/30 animate-in fade-in max-w-lg mx-auto text-center">
+                  <div role="alert" aria-live="polite" className="mt-4 flex flex-col items-center justify-center gap-2 text-state-danger bg-state-danger/10 py-3 px-6 rounded-lg border border-state-danger/30 animate-enter-fade max-w-lg mx-auto text-center">
                     <div className="flex items-center gap-2">
                       <AlertCircle size={16} />
                       <span className="text-sm font-medium">{error}</span>
@@ -575,7 +575,7 @@ export default function App() {
 
                   {/* Chapter Preview - Only visible after parsing */}
                   {selectedNovel.chapters.length > 0 && (
-                    <div className="animate-in fade-in duration-500">
+                    <div className="animate-enter-fade">
                       <h3 className="text-content-primary font-bold mb-4 flex items-center gap-2">
                         <FileText size={16} className="text-accent" />
                         章节列表 (共 {selectedNovel.chapters.length} 章)

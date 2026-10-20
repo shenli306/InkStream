@@ -163,44 +163,10 @@ main {
   contain: layout style;
 }
 
-/* 灵动岛面板 */
-.glass-island {
-  position: relative;
-  overflow: hidden;
-  background-color: var(--bg-scrim);
-  backdrop-filter: var(--glass-blur-lg) saturate(160%);
-  -webkit-backdrop-filter: var(--glass-blur-lg) saturate(160%);
-  border: 1px solid var(--border-strong);
-  box-shadow: var(--shadow-lg);
-  border-radius: var(--radius-xl);
-  transform-origin: center;
-  will-change: transform;
-  transform: translateZ(0);
-}
-
-/* Marquee animation for scrolling text */
-@keyframes marquee {
-  0% { transform: translateX(0); }
-  100% { transform: translateX(-50%); }
-}
-
-.marquee-container {
-  overflow: hidden;
-  white-space: nowrap;
-}
-
-.marquee-text {
-  display: inline-block;
-  animation: marquee 8s linear infinite;
-}
-
 /* backdrop-filter 不支持时的降级：不透明底，保证文字可读 */
 @supports not (backdrop-filter: blur(16px)) {
   .glass-panel {
     background-color: rgba(18, 16, 28, 0.94);
-  }
-  .glass-island {
-    background-color: rgba(8, 7, 13, 0.96);
   }
 }
 
@@ -213,19 +179,6 @@ main {
   background: linear-gradient(180deg, var(--accent-glow) 0%, transparent 38%);
   opacity: 0.35;
   border-radius: inherit;
-}
-
-.glass-input {
-  position: relative;
-  overflow: hidden;
-  background-color: var(--glass-base);
-  border: 1px solid var(--border-subtle);
-  backdrop-filter: var(--glass-blur-sm) saturate(140%);
-  -webkit-backdrop-filter: var(--glass-blur-sm) saturate(140%);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-md);
-  will-change: transform;
-  transform: translateZ(0);
 }
 
 /* 搜索框本体 */
@@ -268,7 +221,6 @@ main {
 }
 
 @supports not (backdrop-filter: blur(10px)) {
-  .glass-input,
   .search-box {
     background-color: rgba(18, 16, 28, 0.94);
   }
@@ -306,215 +258,26 @@ input::placeholder {
 /* 移动端：只降模糊强度，圆角跟随令牌 */
 @media (max-width: 768px) {
   .glass-panel,
-  .glass-island,
-  .glass-input,
   .search-box {
     backdrop-filter: blur(10px) saturate(140%);
     -webkit-backdrop-filter: blur(10px) saturate(140%);
   }
 }
 
-/* 渐变按钮（旧组件仍在用，保留但改为令牌） */
-.btn-gradient {
-  background: var(--gradient-brand);
-  color: var(--text-inverse);
-  transition:
-    transform var(--dur-fast) var(--ease-standard),
-    box-shadow var(--dur-normal) var(--ease-standard),
-    filter var(--dur-fast) var(--ease-standard);
-  box-shadow: 0 4px 16px -6px var(--highlight-glow);
-}
-.btn-gradient:hover {
-  filter: brightness(1.06);
-  transform: translateY(-1px);
-  box-shadow: 0 8px 24px -8px var(--highlight-glow);
-}
+/* ===== 动画系统 =====
+   缓动 / 时长令牌在 tokens.css 第 4 节（--ease-* / --dur-*），这里只放工具类。
+   只保留组件真在用的几条：入场、模态、卡片悬浮。 */
 
-/* 渐变文字 */
-.text-gradient {
-  background: var(--gradient-brand);
-  -webkit-background-clip: text;
-  background-clip: text;
-  -webkit-text-fill-color: transparent;
-}
-/* 确保灵动岛从中心展开 */
-      .dynamic-island-wrapper,
-      .dynamic-island-inner {
-        transform-origin: center !important;
-      }
-      
-      /* 3068 书源选择器动画喵~ */
-      @keyframes source-circle-return {
-        0% { left: 0px; transform: scale(1); }
-        100% { left: calc(100% - 56px); transform: scale(1.1); }
-      }
-      @keyframes source-line-extend {
-        0% { width: 0%; opacity: 0; }
-        100% { width: 100%; opacity: 1; }
-      }
-      @keyframes source-panel-expand {
-        0% { 
-          opacity: 0; 
-          transform: translateY(-16px) scale(0.98);
-        }
-        100% { 
-          opacity: 1; 
-          transform: translateY(0) scale(1);
-        }
-      }
-      @keyframes glow-pulse {
-        0%, 100% { box-shadow: 0 0 24px -6px var(--accent-glow); }
-        50% { box-shadow: 0 0 36px -4px var(--accent-glow), 0 0 56px -8px var(--highlight-glow); }
-      }
-      @keyframes search-shrink {
-        0% { transform: scaleX(1); border-radius: 2rem; }
-        50% { transform: scaleX(0.5); border-radius: 3rem; }
-        100% { transform: scaleX(0.08); border-radius: 50%; }
-      }
-      @keyframes search-expand {
-        0% { transform: scaleX(0.08); border-radius: 50%; opacity: 0; }
-        50% { opacity: 0.5; }
-        100% { transform: scaleX(1); border-radius: 2rem; opacity: 1; }
-      }
-      .animate-source-circle-return { animation: source-circle-return 1.2s cubic-bezier(0.4, 0, 0.2, 1) forwards; }
-      .animate-source-line-extend { animation: source-line-extend 800ms cubic-bezier(0.4, 0, 0.2, 1) forwards; }
-      .animate-source-panel-expand { animation: source-panel-expand 700ms cubic-bezier(0.4, 0, 0.2, 1) forwards; }
-      .animate-glow-pulse { animation: glow-pulse 2s ease-in-out infinite; }
-      .search-shrink { animation: search-shrink 700ms cubic-bezier(0.4, 0, 0.2, 1) forwards; }
-      .search-expand { animation: search-expand 800ms cubic-bezier(0.4, 0, 0.2, 1) forwards; }
-
-      /* Light Pillar Background - 蓝粉版本 */
-      .light-pillar {
-        position: absolute;
-        inset: 0;
-        pointer-events: none;
-        background: radial-gradient(circle at 50% 10%, var(--accent-glow), transparent 45%),
-                    radial-gradient(circle at 50% 95%, var(--highlight-glow), transparent 55%);
-        mix-blend-mode: screen;
-        opacity: 0.55;
-        overflow: hidden;
-        will-change: transform;
-        transform: translateZ(0);
-      }
-
-      .light-pillar::before {
-        content: '';
-        position: absolute;
-        inset: -20%;
-        background: linear-gradient(180deg, var(--accent-glow), var(--highlight-glow) 45%, transparent 90%);
-        filter: blur(88px);
-        transform: rotate(25deg) translateX(-10%);
-        animation: pillar-rotate 35s linear infinite;
-        will-change: transform;
-      }
-
-      .light-pillar::after {
-        content: '';
-        position: absolute;
-        inset: -10%;
-        background: radial-gradient(circle at 50% 40%, var(--accent-glow), transparent 60%),
-                    radial-gradient(circle at 50% 60%, var(--highlight-glow), transparent 60%);
-        filter: blur(32px);
-        mix-blend-mode: screen;
-        animation: pillar-flicker 6s ease-in-out infinite;
-      }
-
-      @keyframes pillar-rotate {
-        0% { transform: rotate(25deg) translateX(-10%); }
-        100% { transform: rotate(385deg) translateX(-10%); }
-      }
-
-      @keyframes pillar-flicker {
-        0%, 100% { opacity: 0.85; }
-        50% { opacity: 0.5; }
-      }
-
-
-
-      /* Smooth spring animations */
-      .transition-spring {
-        transition: all 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
-        will-change: transform;
-        transform: translateZ(0);
-      }
-      
-      .transition-smooth {
-        transition: all 0.4s cubic-bezier(0.4, 0.0, 0.2, 1);
-        will-change: transform;
-        transform: translateZ(0);
-      }
-
-/* ===== 动画系统（原 animations.css，已内联）===== */
-/* =============================
-   InkStream 统一动画系统
-   基于 iOS 灵动岛风格缓动曲线
-   ============================= */
-
-/* ---- 设计令牌 ---- */
-:root {
-  /* 缓动曲线 */
-  --ease-standard: cubic-bezier(0.4, 0.0, 0.2, 1.0);   /* 标准出入 */
-  --ease-decelerate: cubic-bezier(0.0, 0.0, 0.2, 1.0);  /* 减速进入(仅 ease-out) */
-  --ease-accelerate: cubic-bezier(0.4, 0.0, 1.0, 1.0);  /* 加速离开(仅 ease-in) */
-  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1.0);    /* 弹性回弹 */
-  --ease-smooth: cubic-bezier(0.25, 0.1, 0.25, 1.0);     /* 平滑过渡 */
-
-  /* 动画时长体系 */
-  --dur-instant: 100ms;   /* 即时反馈(hover/active/ripple) */
-  --dur-fast: 150ms;      /* 快速过渡(checkbox/开关/徽章) */
-  --dur-normal: 250ms;    /* 标准过渡(hover颜色/边框/常规UI) */
-  --dur-slow: 400ms;      /* 慢速过渡(模态框/弹窗/页面切换) */
-  --dur-entrance: 500ms;  /* 入场动画(列表级联/大组件出现) */
-}
-
-/* ---- GPU 加速工具类 ---- */
+/* ---- GPU 加速 ---- */
 .gpu-accelerated {
   backface-visibility: hidden;
 }
 
-.gpu-transform-only {
-  backface-visibility: hidden;
-}
-
-/* ---- Hover / Active 交互 ---- */
-.interactive-hover {
-  transition: transform var(--dur-fast) var(--ease-standard),
-              box-shadow var(--dur-normal) var(--ease-standard);
-}
-.interactive-hover:hover {
-  transform: translateY(-2px) scale(1.01);
-}
-.interactive-hover:active {
-  transform: translateY(0) scale(0.98);
-}
-
-/* 轻量级 hover - 仅颜色变化 */
-.interactive-glow {
-  transition: box-shadow var(--dur-normal) var(--ease-standard),
-              border-color var(--dur-normal) var(--ease-standard);
-}
-
 /* ---- 入场动画 ---- */
-.animate-enter-fade {
-  animation: enter-fade var(--dur-entrance) var(--ease-decelerate) both;
-  will-change: opacity;
-}
-
 .animate-enter-slide-up {
   animation: enter-slide-up var(--dur-entrance) var(--ease-decelerate) both;
   will-change: transform, opacity;
   transform: translateZ(0);
-}
-
-.animate-enter-scale {
-  animation: enter-scale var(--dur-slow) var(--ease-spring) both;
-  will-change: transform, opacity;
-  transform: translateZ(0);
-}
-
-@keyframes enter-fade {
-  from { opacity: 0; }
-  to   { opacity: 1; }
 }
 
 @keyframes enter-slide-up {
@@ -522,22 +285,58 @@ input::placeholder {
   to   { opacity: 1; transform: translateY(0);    }
 }
 
-@keyframes enter-scale {
-  from { opacity: 0; transform: scale(0.92); }
-  to   { opacity: 1; transform: scale(1);    }
+/* ---- 入场淡入 ----
+   App.tsx 的错误提示条 / 搜索面板原来写的是 animate-in fade-in（tailwindcss-animate 的类名，
+   项目没装那个插件，所以两条一直是空类名，元素是硬切出现的）。 */
+.animate-enter-fade {
+  animation: enter-fade var(--dur-entrance) var(--ease-decelerate) both;
+  will-change: opacity;
 }
 
-/* ---- 模态框 / 弹窗 ---- */
-@keyframes modal-in {
-  from { opacity: 0; transform: scale(0.95) translateY(8px); }
-  to   { opacity: 1; transform: scale(1) translateY(0);     }
-}
-
-@keyframes overlay-in {
+@keyframes enter-fade {
   from { opacity: 0; }
   to   { opacity: 1; }
 }
 
+/* ---- 细滚动条 ----
+   App.tsx / Reader / ChapterDrawer 都在挂 custom-scrollbar，但一直没定义过。
+   Firefox 走 scrollbar-* 标准属性，WebKit 走伪元素，两套都得写。 */
+.custom-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-strong) transparent;
+}
+
+.custom-scrollbar::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border-radius: var(--radius-pill);
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: var(--text-disabled);
+}
+
+/* ---- 缩放弹入 ---- */
+.animate-scale-in {
+  animation: scale-in var(--dur-slow) var(--ease-spring) both;
+  will-change: transform, opacity;
+  transform: translateZ(0);
+}
+
+@keyframes scale-in {
+  from { opacity: 0; transform: scale(0); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+/* ---- 模态框 / 弹窗 ---- */
 .animate-modal-in {
   animation: modal-in var(--dur-slow) var(--ease-spring) both;
   will-change: transform, opacity;
@@ -549,94 +348,27 @@ input::placeholder {
   will-change: opacity;
 }
 
-/* ---- 骨架屏 / 加载 ---- */
-@keyframes shimmer {
-  0%   { transform: translateX(-100%); }
-  100% { transform: translateX(100%);  }
+@keyframes modal-in {
+  from { opacity: 0; transform: scale(0.95) translateY(8px); }
+  to   { opacity: 1; transform: scale(1) translateY(0);     }
 }
 
-.animate-shimmer {
-  animation: shimmer 1.5s var(--ease-standard) infinite;
-  will-change: transform;
-  transform: translateZ(0);
-}
-
-.skeleton {
-  background: linear-gradient(
-    90deg,
-    rgba(255,255,255,0.04) 25%,
-    rgba(255,255,255,0.08) 50%,
-    rgba(255,255,255,0.04) 75%
-  );
-  background-size: 200% 100%;
-  animation: shimmer 1.5s var(--ease-standard) infinite;
-  border-radius: 0.75rem;
-  will-change: transform;
-  transform: translateZ(0);
-}
-
-/* ---- 灵动岛脉搏 ---- */
-@keyframes island-pulse {
-  0%, 100% { opacity: 0.6; transform: scaleX(0.8); }
-  50%      { opacity: 1;   transform: scaleX(1);   }
-}
-
-.animate-island-pulse {
-  animation: island-pulse 2s var(--ease-smooth) infinite;
-}
-
-/* ---- 缩放弹入 ---- */
-@keyframes scale-in {
-  from { opacity: 0; transform: scale(0); }
-  to   { opacity: 1; transform: scale(1); }
-}
-
-.animate-scale-in {
-  animation: scale-in var(--dur-slow) var(--ease-spring) both;
-  will-change: transform, opacity;
-  transform: translateZ(0);
-}
-
-/* ---- 页面切换 / 路由 ---- */
-@keyframes page-enter {
-  from { opacity: 0; transform: translateY(24px); }
-  to   { opacity: 1; transform: translateY(0);    }
-}
-
-.page-enter {
-  animation: page-enter var(--dur-entrance) var(--ease-decelerate) both;
-  will-change: transform, opacity;
-  transform: translateZ(0);
-}
-
-/* ---- 淡入淡出（用于视图切换） ---- */
-@keyframes view-fade-in {
+@keyframes overlay-in {
   from { opacity: 0; }
   to   { opacity: 1; }
 }
 
-.view-fade-in {
-  animation: view-fade-in var(--dur-slow) var(--ease-standard) both;
+/* ---- 进度流光 ----
+   CuteProgress 的类名是 animate-shimmer-sweep，以前只有没人挂的 .animate-shimmer，
+   所以进度条和卡片上的流光从来没动过。这里补上真正被引用的那个名字。 */
+.animate-shimmer-sweep {
+  animation: shimmer-sweep 1.6s var(--ease-standard) infinite;
+  will-change: transform;
 }
 
-/* ---- 滚动驱动 ---- */
-.scroll-fade-in {
-  opacity: 0;
-  transform: translateY(16px);
-  transition: opacity var(--dur-normal) var(--ease-standard),
-              transform var(--dur-normal) var(--ease-standard);
-  will-change: transform, opacity;
-}
-
-.scroll-fade-in.visible {
-  opacity: 1;
-  transform: translateY(0);
-}
-
-/* ---- 搜索框 / 输入框焦点 ---- */
-.search-focus-ring {
-  transition: box-shadow var(--dur-normal) var(--ease-standard),
-              border-color var(--dur-normal) var(--ease-standard);
+@keyframes shimmer-sweep {
+  from { transform: translateX(-100%); }
+  to   { transform: translateX(100%);  }
 }
 
 /* ---- 卡片悬浮 ---- */
@@ -650,35 +382,6 @@ input::placeholder {
   will-change: transform;
   transform: translateY(-4px) translateZ(0);
   box-shadow: var(--shadow-lg), 0 0 32px -12px var(--highlight-glow);
-}
-
-/* ---- 列表项级联动画延迟 ---- */
-.stagger-1  { animation-delay: 50ms;  }
-.stagger-2  { animation-delay: 100ms; }
-.stagger-3  { animation-delay: 150ms; }
-.stagger-4  { animation-delay: 200ms; }
-.stagger-5  { animation-delay: 250ms; }
-.stagger-6  { animation-delay: 300ms; }
-.stagger-7  { animation-delay: 350ms; }
-.stagger-8  { animation-delay: 400ms; }
-.stagger-9  { animation-delay: 450ms; }
-.stagger-10 { animation-delay: 500ms; }
-
-/* ---- 回到顶部按钮 ---- */
-@keyframes float-up {
-  from { opacity: 0; transform: translateY(16px) scale(0.8); }
-  to   { opacity: 1; transform: translateY(0) scale(1);     }
-}
-
-.scroll-to-top {
-  animation: float-up var(--dur-normal) var(--ease-spring) both;
-  will-change: transform, opacity;
-  transform: translateZ(0);
-}
-
-/* 兼容旧类名 .animate-float */
-.animate-float {
-  animation: float-up 1.2s var(--ease-smooth) both;
 }
 
 /* ---- 减小运动偏好 ---- */

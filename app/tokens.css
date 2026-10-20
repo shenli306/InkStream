@@ -230,6 +230,9 @@
   --shadow-md: 0 8px 24px -8px rgba(0, 0, 0, 0.55);
   --shadow-lg: 0 20px 48px -16px rgba(0, 0, 0, 0.65);
   --shadow-glow: 0 0 0 1px var(--accent-border), 0 8px 32px -12px var(--accent-glow);
+  /* 更沉的一层：模态 / 大面板浮在页面之上。reader.css 和 CuteProgress 一直在引用它，
+     但直到这次清理前这个令牌根本没定义，box-shadow 被浏览器整条丢弃 */
+  --shadow-overlay: 0 24px 64px -20px rgba(0, 0, 0, 0.7);
 
   /* 动效（与旧 --ease-* / --dur-* 保持同名兼容，值统一） */
   --ease-standard: cubic-bezier(0.4, 0, 0.2, 1);
@@ -252,13 +255,7 @@
 
 /* ---------- 5. 语义工具类 ---------- */
 
-/* 表面：所有面板/卡片/抽屉都从这里选一档 */
-.surface-base {
-  background-color: var(--bg-raised);
-  background-image: var(--gradient-surface);
-  border: 1px solid var(--border-subtle);
-}
-
+/* 表面：面板/卡片/抽屉从这里选一档 */
 .surface-elevated {
   background-color: var(--bg-elevated);
   border: 1px solid var(--border-faint);
@@ -317,35 +314,11 @@
   color: var(--text-primary);
 }
 
-.heading-2 {
-  font-family: var(--font-serif);
-  font-size: var(--text-xl);
-  font-weight: var(--weight-bold);
-  line-height: var(--leading-snug);
-  color: var(--text-primary);
-}
-
 .body-text {
   font-family: var(--font-sans);
   font-size: var(--text-base);
   line-height: var(--leading-normal);
   color: var(--text-secondary);
-}
-
-.meta-text {
-  font-family: var(--font-sans);
-  font-size: var(--text-xs);
-  line-height: 1.4;
-  letter-spacing: var(--tracking-wide);
-  color: var(--text-tertiary);
-}
-
-.caps-text {
-  font-family: var(--font-sans);
-  font-size: var(--text-2xs);
-  font-weight: var(--weight-bold);
-  text-transform: uppercase;
-  letter-spacing: var(--tracking-caps);
 }
 
 /* 按钮：主操作统一蓝，高亮操作才用粉 */
@@ -384,30 +357,6 @@
   cursor: not-allowed;
   transform: none;
   box-shadow: none;
-}
-
-.btn-ghost {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.5rem;
-  padding: 0.625rem 1rem;
-  border-radius: var(--radius-md);
-  border: 1px solid transparent;
-  background-color: transparent;
-  color: var(--text-secondary);
-  font-family: var(--font-sans);
-  font-size: var(--text-sm);
-  transition:
-    background-color var(--dur-fast) var(--ease-standard),
-    color var(--dur-fast) var(--ease-standard),
-    border-color var(--dur-fast) var(--ease-standard);
-}
-
-.btn-ghost:hover {
-  background-color: var(--glass-subtle);
-  border-color: var(--border-subtle);
-  color: var(--text-primary);
 }
 
 /* 徽章：完结/连载、标签、书源等全部复用这一套 */
@@ -449,12 +398,6 @@
   border-color: var(--highlight-border);
   background-color: var(--highlight-soft);
   color: var(--highlight);
-}
-
-.badge--danger {
-  border-color: var(--state-danger-border);
-  background-color: var(--state-danger-soft);
-  color: var(--state-danger);
 }
 
 /* 大标题渐变：从主文字色渐隐到 34%，替代原来的 from-white via-white to-white/40 */
