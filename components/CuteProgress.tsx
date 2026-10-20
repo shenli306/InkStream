@@ -7,79 +7,93 @@ interface CuteProgressProps {
     message: string;
 }
 
-const COLORS = {
-    [AppState.ANALYZING]: 'text-cyan-400',
-    [AppState.DOWNLOADING]: 'text-emerald-400',
-    [AppState.PARSING]: 'text-amber-400',
-    [AppState.PACKING]: 'text-pink-400',
-    default: 'text-white'
+/* 状态强调色（令牌层 app/tokens.css） */
+const STATE_TONE: Record<string, string> = {
+    [AppState.ANALYZING]: 'state-info',
+    [AppState.DOWNLOADING]: 'state-success',
+    [AppState.PARSING]: 'state-warning',
+    [AppState.PACKING]: 'highlight',
+    default: 'content-primary',
 };
 
 export const CuteProgress: React.FC<CuteProgressProps> = ({ state, progress, message }) => {
-    const getColor = () => COLORS[state as keyof typeof COLORS] || COLORS.default;
+    const tone = STATE_TONE[state] ?? STATE_TONE.default;
+    const toneVar = `var(--${tone})`;
+    const toneSoft = `var(--${tone}-soft, color-mix(in srgb, var(--${tone}) 18%, transparent))`;
 
     return (
-        <div className="w-full bg-black/40 backdrop-blur-md py-6 px-8 rounded-3xl flex flex-col items-center justify-center border border-white/10 shadow-2xl overflow-hidden relative group">
+        <div className="w-full surface-glass-strong py-8 px-8 rounded-lg flex flex-col items-center justify-center shadow-overlay overflow-hidden relative group">
 
-            {/* Dynamic Background Glow */}
-            <div className={`absolute inset-0 opacity-20 bg-gradient-to-r ${state === AppState.DOWNLOADING ? 'from-emerald-500/0 via-emerald-500 to-emerald-500/0' :
-                    state === AppState.PACKING ? 'from-pink-500/0 via-pink-500 to-pink-500/0' :
-                        'from-indigo-500/0 via-indigo-500 to-indigo-500/0'
-                } translate-x-[-100%] group-hover:translate-x-[100%] animate-[shimmer_2s_infinite]`} style={{ transition: 'background-image 400ms cubic-bezier(0.4,0,0.2,1)' }}></div>
+            {/* 动态流光背景 */}
+            <div
+                className="absolute inset-0 opacity-15 pointer-events-none animate-shimmer-sweep"
+                style={{
+                    backgroundImage: `linear-gradient(90deg, transparent, ${toneVar}, transparent)`,
+                    transition: 'background-image 400ms cubic-bezier(0.4,0,0.2,1)',
+                }}
+            />
 
-            {/* Anime Girl GIF 喵~ */}
-            <div className="relative w-48 h-48 mb-2 hover:scale-110 gpu-accelerated" style={{ transition: 'transform 300ms cubic-bezier(0.34,1.56,0.64,1)' }}>
-                <img 
-                    src="/loading-girl.gif" 
-                    alt="Loading..." 
-                    className="w-full h-full object-contain drop-shadow-[0_0_15px_rgba(255,182,193,0.5)]"
+            {/* 加载动画 */}
+            <div className="relative w-44 h-44 mb-3 gpu-accelerated transition-transform duration-300 ease-out hover:scale-105">
+                <img
+                    src="/loading-girl.gif"
+                    alt=""
+                    aria-hidden="true"
+                    className="w-full h-full object-contain drop-shadow-[0_0_15px_rgba(255,182,193,0.35)]"
                 />
             </div>
 
-            {/* State Text */}
-            <div className="flex flex-col items-center gap-1 z-10">
-                <span className={`text-base font-bold tracking-widest uppercase ${getColor()} mb-1`}>
+            {/* 状态文字 */}
+            <div className="flex flex-col items-center gap-1.5 z-10">
+                <span
+                    className="text-base font-bold tracking-widest uppercase mb-1 transition-colors duration-500"
+                    style={{ color: toneVar }}
+                    role="status"
+                    aria-live="polite"
+                >
                     {state === AppState.ANALYZING && "Checking..."}
                     {state === AppState.DOWNLOADING && "Downloading..."}
                     {state === AppState.PARSING && "Processing..."}
                     {state === AppState.PACKING && "Packaging..."}
                 </span>
-                <span className="text-xs text-white/60 font-medium max-w-[200px] truncate text-center">
+                <span className="text-xs text-content-tertiary font-medium max-w-[220px] truncate text-center">
                     {message}
                 </span>
             </div>
 
-            {/* Progress Bar */}
-            <div className="w-full max-w-[200px] h-3 bg-white/10 rounded-full mt-4 overflow-hidden relative border border-white/5">
+            {/* 进度条 */}
+            <div className="w-full max-w-[220px] h-2.5 surface-elevated rounded-pill mt-5 overflow-hidden relative">
                 <div
-                    className={`h-full rounded-full transition-all duration-300 relative overflow-hidden ${state === AppState.PACKING ? 'bg-gradient-to-r from-pink-500 to-rose-500' :
-                            state === AppState.DOWNLOADING ? 'bg-gradient-to-r from-emerald-500 to-teal-500' :
-                                'bg-gradient-to-r from-indigo-500 to-purple-500'
-                        }`}
-                    style={{ width: `${progress}%` }}
+                    className="h-full rounded-pill transition-[width] duration-300 relative overflow-hidden"
+                    style={{ width: `${progress}%`, background: `linear-gradient(90deg, ${toneSoft}, ${toneVar})` }}
+                    role="progressbar"
+                    aria-valuenow={Math.round(progress)}
+                    aria-valuemin={0}
+                    aria-valuemax={100}
                 >
-                    <div className="absolute inset-0 bg-white/30 w-full h-full animate-[shimmer_1s_infinite] translate-x-[-100%]" style={{ backgroundImage: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.5), transparent)' }}></div>
+                    <div className="absolute inset-0 animate-shimmer-sweep" style={{ backgroundImage: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.6), transparent)' }} />
                 </div>
             </div>
 
-            {/* Percentage */}
-            <span className="mt-2 text-xs font-mono text-white/40">
+            {/* 百分比 */}
+            <span className="mt-2 text-xs font-mono text-content-disabled tabular-nums">
                 {progress}%
             </span>
 
-            {/* Floating Particles (Simple CSS circles) */}
-            <div className="absolute inset-0 pointer-events-none overflow-hidden">
+            {/* 漂浮粒子 */}
+            <div className="absolute inset-0 pointer-events-none overflow-hidden" aria-hidden="true">
                 {[...Array(5)].map((_, i) => (
                     <div
                         key={i}
-                        className={`absolute rounded-full opacity-40 animate-pulse ${getColor().replace('text-', 'bg-')}`}
+                        className="absolute rounded-full opacity-30 animate-pulse"
                         style={{
                             width: Math.random() * 10 + 4 + 'px',
                             height: Math.random() * 10 + 4 + 'px',
                             top: Math.random() * 100 + '%',
                             left: Math.random() * 100 + '%',
                             animationDuration: Math.random() * 2 + 1 + 's',
-                            animationDelay: Math.random() + 's'
+                            animationDelay: Math.random() + 's',
+                            background: toneVar,
                         }}
                     />
                 ))}

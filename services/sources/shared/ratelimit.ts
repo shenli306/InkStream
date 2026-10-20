@@ -45,6 +45,29 @@ const DEFAULT_INTERVAL = 250;
 
 const sleep = (ms: number) => new Promise<void>(resolve => setTimeout(resolve, ms));
 
+/**
+ * 把「等待」和「取消」赛跑喵~
+ * 取消赢了返回 false；原 promise 不取消（让它自然结束，不泄漏 listener）。
+ * 用途：用户点了取消下载后，别让排队中的章节还在闸门 / 间隔里干等，
+ * 否则一次取消要等每 host 250ms 的串行队列慢慢排空。
+ */
+const abortable = async (p: Promise<void>, signal?: AbortSignal | null): Promise<boolean> => {
+  if (!signal) { await p; return true; }
+  if (signal.aborted) return false;
+
+  let onAbort: (() => void) | null = null;
+  const aborted = new Promise<boolean>(resolve => {
+    onAbort = () => resolve(false);
+    signal.addEventListener('abort', onAbort, { once: true });
+  });
+
+  try {
+    return await Promise.race([p.then(() => true), aborted]);
+  } finally {
+    if (onAbort) signal.removeEventListener('abort', onAbort);
+  }
+};
+
 const getInterval = (host: string): number => HOST_INTERVALS[host] ?? DEFAULT_INTERVAL;
 
 /**
@@ -56,7 +79,7 @@ const getInterval = (host: string): number => HOST_INTERVALS[host] ?? DEFAULT_IN
  *
  * 这样「上一个请求完成」的时间戳才准确，间隔才不会被慢响应吃掉。
  */
-export const acquireHostSlot = async (host: string): Promise<() => void> => {
+export const acquireHostSlot = async (host: string, signal?: AbortSignal | null): Promise<() => void> => {
   let state = hostStates.get(host);
   if (!state) {
     state = { lastFinishedAt: 0, chain: Promise.resolve(), count: 0 };
@@ -68,20 +91,24 @@ export const acquireHostSlot = async (host: string): Promise<() => void> => {
   let releaseSlot!: () => void;
   state.chain = new Promise<void>(resolve => { releaseSlot = resolve; });
 
-  await previous;
+  // 任何提前返回的路径都必须 resolve 掉队列，否则后面的等待者会饿死喵~
+  const release = () => {
+    state!.lastFinishedAt = Date.now();
+    releaseSlot();
+  };
+
+  // 取消：不再排队、不再等间隔（本次没有发出请求，不污染间隔计时）喵~
+  if (!(await abortable(previous, signal))) return release;
 
   const interval = getInterval(host);
   const sinceLast = Date.now() - state.lastFinishedAt;
   if (sinceLast < interval) {
-    await sleep(interval - sinceLast);
+    if (!(await abortable(sleep(interval - sinceLast), signal))) return release;
   }
 
   state.count++;
 
-  return () => {
-    state!.lastFinishedAt = Date.now();
-    releaseSlot();
-  };
+  return release;
 };
 
 /** 把 URL 归一成 hostname 键；非法 URL 返回空串（不节流）喵~ */
@@ -103,8 +130,10 @@ let maxInflight = 6;
 export const setMaxInflight = (n: number) => { maxInflight = Math.max(1, n); };
 export const getInflight = () => inflight;
 
-export const acquireGlobalSlot = async (): Promise<() => void> => {
+export const acquireGlobalSlot = async (signal?: AbortSignal | null): Promise<() => void> => {
   while (inflight >= maxInflight) {
+    // 取消时别继续堵在闸门里（没有拿到名额，所以返回空 release 是对的）喵~
+    if (signal?.aborted) return () => {};
     await sleep(50);
   }
   inflight++;

@@ -313,16 +313,16 @@ async function handle(req: NextRequest): Promise<Response> {
       try {
         const htmlText = finalBuffer.toString('utf-8');
         if (htmlText.includes('//' + urlObj.host + '/') || htmlText.includes('="/') || htmlText.includes("='/")) {
-          const httpsOrigin = 'https://' + urlObj.host;
+          const targetOrigin = urlObj.protocol + '//' + urlObj.host; // 跟随原始协议：http 站点不能被改写成 https（书库阁 https 是 404）喵~
           const fixedHtml = htmlText
-            .replace(/src="\/([^"]*?)"/g, `src="${httpsOrigin}/$1"`)
-            .replace(/src='\/([^']*?)'/g, `src='${httpsOrigin}/$1'`)
-            .replace(/href="\/([^"]*?)"/g, `href="${httpsOrigin}/$1"`)
-            .replace(/href='\/([^']*?)'/g, `href='${httpsOrigin}/$1'`)
-            .replace(/srcset="\/([^"]*?)"/g, `srcset="${httpsOrigin}/$1"`)
-            .replace(/srcset='\/([^']*?)'/g, `srcset='${httpsOrigin}/$1'`)
-            .replace(/action="\/([^"]*?)"/g, `action="${httpsOrigin}/$1"`)
-            .replace(/action='\/([^']*?)'/g, `action='${httpsOrigin}/$1'`);
+            .replace(/src="\/([^"]*?)"/g, `src="${targetOrigin}/$1"`)
+            .replace(/src='\/([^']*?)'/g, `src='${targetOrigin}/$1'`)
+            .replace(/href="\/([^"]*?)"/g, `href="${targetOrigin}/$1"`)
+            .replace(/href='\/([^']*?)'/g, `href='${targetOrigin}/$1'`)
+            .replace(/srcset="\/([^"]*?)"/g, `srcset="${targetOrigin}/$1"`)
+            .replace(/srcset='\/([^']*?)'/g, `srcset='${targetOrigin}/$1'`)
+            .replace(/action="\/([^"]*?)"/g, `action="${targetOrigin}/$1"`)
+            .replace(/action='\/([^']*?)'/g, `action='${targetOrigin}/$1'`);
           if (fixedHtml !== htmlText) finalBuffer = Buffer.from(fixedHtml, 'utf-8');
         }
       } catch {

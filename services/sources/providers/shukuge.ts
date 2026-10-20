@@ -6,7 +6,10 @@ import type { SourceProvider } from '../shared/types';
 import { SHUKUGE_URL } from '../shared/constants';
 import { parseHTML } from '../shared/dom';
 import { fetchText, proxifyImage } from '../shared/fetcher';
+import { cleanChapterLines } from '../shared/textClean';
 import { isRelevant } from '../shared/relevance';
+
+const SHUKUGE_HOST = new URL(SHUKUGE_URL).host; // proxy 会把相对链接改写成绝对 URL，需要按 host 判定同站喵~
 
 const cleanShukugeTitle = (title: string) => {
   return (title || '')
@@ -150,8 +153,10 @@ export const shukugeProvider: SourceProvider = {
   },
   getDetails: async (novel: Novel): Promise<Novel> => {
     // 书库阁的元数据通常在 /book/id/，而目录在 /book/id/index.html
-    const detailUrl = novel.detailUrl.endsWith('index.html') ? novel.detailUrl.replace('index.html', '') : 
-                     (novel.detailUrl.endsWith('/') ? novel.detailUrl : `${novel.detailUrl}/`);
+    // 书库阁只有 http 站点（https 会落到 nginx 404），统一归一到 SHUKUGE_URL 喵~
+    const normalizedDetailUrl = novel.detailUrl.replace(/^https:\/\/(?:www\.)?shukuge\.com/i, SHUKUGE_URL);
+    const detailUrl = normalizedDetailUrl.endsWith('index.html') ? normalizedDetailUrl.replace('index.html', '') : 
+                     (normalizedDetailUrl.endsWith('/') ? normalizedDetailUrl : `${normalizedDetailUrl}/`);
     const indexUrl = `${detailUrl}index.html`;
     
     console.log(`[Shukuge] Fetching metadata from: ${detailUrl}喵~`);
@@ -219,12 +224,12 @@ export const shukugeProvider: SourceProvider = {
       const title = link.textContent?.trim() || "";
       
       // 过滤掉非章节链接
-      if (href && !href.startsWith('http') && 
+      if (href && 
           title && !['首页', '上一页', '下一页', '末页', '加入书签', '投推荐票', '章节目录', 'TXT下载'].includes(title)) {
         
         try {
           const fullUrl = new URL(href, indexUrl).href;
-          if (!seenUrls.has(fullUrl) && fullUrl.endsWith('.html') && !fullUrl.endsWith('index.html')) {
+          if (new URL(fullUrl).host === SHUKUGE_HOST && !seenUrls.has(fullUrl) && fullUrl.endsWith('.html') && !fullUrl.endsWith('index.html')) {
             seenUrls.add(fullUrl);
             chapters.push({
               number: chapters.length + 1,
@@ -270,7 +275,7 @@ export const shukugeProvider: SourceProvider = {
     if (!contentEl) throw new Error("未找到章节内容喵~");
     
     // 清理广告
-    contentEl.querySelectorAll('script, a, div[style*="display:none"]').forEach(el => el.remove());
+    contentEl.querySelectorAll('script, a, .bottem1, .bottem2, .bottem3, .bottem, div[style*="display:none"]').forEach(el => el.remove()); // .bottem* 是书库阁的翻页导航块（顶部+底部各一块，里面残留 ← → 文本节点）喵~
     
     let text = contentEl.innerHTML
       .replace(/<br\s*\/?>/gi, '\n')
@@ -285,13 +290,12 @@ export const shukugeProvider: SourceProvider = {
     const cleanText = tempDiv.textContent || "";
     const lines = cleanText.split('\n');
     
-    const finalLines = lines
-      .map(line => line.trim())
+    const finalLines = cleanChapterLines(lines)
       .filter(l => {
         if (l.length === 0) return false;
         
         const junkKeywords = [
-          '书库阁', 'www.', '目录', '上一页', '下一页', '尾页', '首页', 
+          '书库阁', 'www.', '目录', '上一页', '下一页', '尾页', '首页', '投推荐票', '加入书签', 
           'Top', '返回目录', '获取失败', '第阅读记录页', '推荐本书', '举报错误'
         ];
         

@@ -7,6 +7,7 @@ import { WANBENGE_URL } from '../shared/constants';
 import { parseHTML } from '../shared/dom';
 import { fetchText, proxifyImage } from '../shared/fetcher';
 import { isRelevant } from '../shared/relevance';
+import { cleanChapterLines } from '../shared/textClean';
 
 export const wanbengeProvider: SourceProvider = {
   key: 'wanbenge',
@@ -308,7 +309,7 @@ export const wanbengeProvider: SourceProvider = {
         throw new Error("Content div not found");
     }
 
-    cDiv.querySelectorAll('p.text-center, a, script, div[style*="display:none"]').forEach(el => el.remove());
+    cDiv.querySelectorAll('p.text-center, a, .bottem1, .bottem2, .bottem3, .bottem, script, div[style*="display:none"]').forEach(el => el.remove());
     
     // 统一处理所有换行和 HTML 实体喵~
     let text = cDiv.innerHTML
@@ -324,8 +325,7 @@ export const wanbengeProvider: SourceProvider = {
     const cleanText = tempDiv.textContent || "";
     
     const lines = cleanText.split('\n');
-    const finalLines = lines
-      .map(l => l.trim())
+    const finalLines = cleanChapterLines(lines)
       .filter(l => {
         if (l.length === 0) return false;
         

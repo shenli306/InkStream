@@ -8,6 +8,7 @@ import { parseHTML } from '../shared/dom';
 import { fetchText, proxifyImage } from '../shared/fetcher';
 import { isRelevant } from '../shared/relevance';
 import { getCoverCache, saveCoverCache } from '../shared/coverCache';
+import { cleanChapterLines } from '../shared/textClean';
 
 
 export const aliceswProvider: SourceProvider = {
@@ -466,7 +467,7 @@ export const aliceswProvider: SourceProvider = {
                       doc.querySelector('article');
       
       if (contentEl) {
-        contentEl.querySelectorAll('script, style, ins, .ads, .ad, .advertisement, a').forEach(el => el.remove());
+        contentEl.querySelectorAll('script, style, ins, .ads, .ad, .advertisement, .bottem1, .bottem2, .bottem3, .bottem, a').forEach(el => el.remove());
         
         let text = contentEl.innerHTML
           .replace(/<br\s*\/?>/gi, '\n')
@@ -487,8 +488,7 @@ export const aliceswProvider: SourceProvider = {
           '章节报错', '免登录', '推荐本书', '加入书架', '章节加载中', '加载中...'
         ];
         
-        const lines = cleanText.split('\n')
-          .map(line => line.trim())
+        const lines = cleanChapterLines(cleanText.split('\n'))
           .filter(line => {
             if (line.length === 0) return false;
             if (line.length < 20) {

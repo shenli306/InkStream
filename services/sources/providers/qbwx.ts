@@ -16,6 +16,7 @@ import { QBWX_URL } from '../shared/constants';
 import { fetchText } from '../shared/fetcher';
 import { parseHTML } from '../shared/dom';
 import { isRelevant } from '../shared/relevance';
+import { cleanChapterLines } from '../shared/textClean';
 
 const CHAPTERS_PER_PAGE = 40;
 
@@ -118,7 +119,7 @@ function sliceBalancedDiv(html: string, startIndex: number, openTagEnd: number):
 
 /** 把正文 HTML 洗成纯文本段落喵~ */
 function cleanQbwxHtml(raw: string): string {
-  return raw
+    const flat = raw
     .replace(/<script[\s\S]*?<\/script>/gi, '')
     .replace(/<style[\s\S]*?<\/style>/gi, '')
     // 站点在公众章节里会插「本章未完，点击下一页继续阅读」和收藏提示喵~
@@ -129,11 +130,17 @@ function cleanQbwxHtml(raw: string): string {
     .replace(/<[^>]+>/g, '')
     .replace(/&nbsp;/g, ' ')
     .replace(/&ldquo;/g, '“').replace(/&rdquo;/g, '”')
+    // 导航里的箭头可能是实体（&larr;/&rarr;），先还原成字符，后面的通用清洗才认得出喵~
+    .replace(/&larr;/g, '\u2190')
+    .replace(/&rarr;/g, '\u2192')
     .replace(/&lt;/g, '<').replace(/&gt;/g, '>')
     .replace(/&amp;/g, '&')
     .replace(/[ \t]+/g, ' ')
     .replace(/\n{3,}/g, '\n\n')
     .trim();
+
+    // 站点把翻页导航和正文塞在同一个容器里，去掉 <a> 标签后会残留「←  →」这种纯符号行喵~
+    return cleanChapterLines(flat.split('\n')).join('\n\n');
 }
 
 /**

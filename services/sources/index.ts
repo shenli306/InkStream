@@ -10,7 +10,7 @@ export type { SourceProvider } from './shared/types';
 export type { SourceKey } from './shared/constants';
 
 // 抓取工具
-export { fetchBlob } from './shared/fetcher';
+export { fetchBlob, registerAbortSignal, clearAbortSignal, isAbortRequested } from './shared/fetcher';
 
 // 相关性判定
 export { isRelevant } from './shared/relevance';
@@ -29,7 +29,7 @@ export {
 } from './registry';
 
 // 公共 API
-export { searchNovel, getNovelDetails, downloadAndParseNovel } from './api';
+export { searchNovel, getNovelDetails, downloadAndParseNovel, DownloadCancelledError, isDownloadCancelled } from './api';
 
 // 智能抓取
 export { smartSearchNovel, smartFetchChapter } from './smart';

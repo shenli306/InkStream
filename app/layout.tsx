@@ -3,7 +3,7 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "InkStream - 小说下载器",
-  description: "InkStream 小说 / 音乐 / 漫画 / 视频下载器",
+  description: "InkStream 小说下载器：全网搜书、智能分章、EPUB 打包",
 };
 
 export default function RootLayout({
@@ -19,7 +19,7 @@ export default function RootLayout({
           rel="stylesheet"
         />
       </head>
-      <body className="antialiased selection:bg-indigo-500 selection:text-white">
+      <body className="antialiased">
         {children}
       </body>
     </html>

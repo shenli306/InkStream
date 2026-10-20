@@ -1,0 +1,425 @@
+/* ============================================================
+   InkStream 设计令牌层
+   ------------------------------------------------------------
+   唯一的颜色 / 排版 / 阴影 / 圆角 / 运动来源。
+   新代码只准引用这里的变量或语义工具类，不要再写 indigo-500、
+   pink-300 这类硬编码色值。
+
+   分层：
+     1. 基础色板（palette）—— 只在这一层出现具体色值
+     2. 语义令牌（semantic）—— 组件只用这一层
+     3. 排版刻度（type scale）
+     4. 间距 / 圆角 / 阴影 / 运动
+     5. 语义工具类
+
+   主题：暗色（墨底 #0d0c15）。
+   ink 系列越往 950 走越深，950 是页面底，700 是最浅的中性面。
+   粉蓝直接在暗底上发亮，强调色用 400 档，hover 用更亮的 300 档。
+   ============================================================ */
+
+/* ---------- 1. 基础色板 ---------- */
+:root {
+  /* 品牌：粉蓝双色，300/400/500 由浅到深 */
+  --palette-pink-300: #f7c6dd;
+  --palette-pink-400: #f0a6c8;
+  --palette-pink-500: #e58ab4;
+  --palette-blue-300: #b8dcfa;
+  --palette-blue-400: #8ec5f0;
+  --palette-blue-500: #6aabdc;
+
+  /* 中性：墨色基底，越浅越近白 */
+  --palette-ink-950: #0d0c15;
+  --palette-ink-900: #131220;
+  --palette-ink-850: #1a1828;
+  --palette-ink-800: #22203a;
+  --palette-ink-700: #2e2b47;
+
+  /* 夜色：新背景（黑穹顶 + 底部双角紫辉）用到的紫，单独一组便于整体调色 */
+  --palette-void: #000000;
+  --palette-violet-800: #4523a2; /* 底部两角最亮处 */
+  --palette-violet-900: #391c80; /* 底部中段底色 */
+
+  /* 状态 */
+  --palette-green-400: #5eead4;
+  --palette-green-500: #34d399;
+  --palette-amber-400: #fbbf24;
+  --palette-amber-500: #f59e0b;
+  --palette-rose-400: #fb7185;
+  --palette-rose-500: #f43f5e;
+  --palette-red-400: #f87171;
+  --palette-cyan-400: #22d3ee;
+}
+
+/* ---------- 2. 语义令牌 ---------- */
+:root {
+  /* 背景 */
+  --bg-base: var(--palette-ink-950);
+  --bg-raised: var(--palette-ink-900);
+  --bg-elevated: var(--palette-ink-850);
+  --bg-hover: var(--palette-ink-800);
+  --bg-scrim: rgba(13, 12, 21, 0.72);
+
+  /* 氛围背景：黑穹顶 + 左右下角紫辉 + 底部紫晕。fixed 铺满视口，随窗口缩放 */
+  --bg-void: var(--palette-void);
+  --bg-aurora: var(--palette-violet-800);
+  --bg-aurora-soft: rgba(69, 35, 162, 0.83);
+  --bg-aurora-mid: rgba(69, 35, 162, 0.581);
+  --bg-aurora-fade: rgba(69, 35, 162, 0);
+  --bg-aurora-tip: rgba(105, 52, 235, 0.16); /* 下两角尖端补光，修掉角尖偏暗 ~10/255 */
+  --bg-aurora-tip-fade: rgba(105, 52, 235, 0);
+  --bg-aurora-depth: var(--palette-violet-900);
+  --bg-atmosphere:
+    radial-gradient(14% 18% at 0% 102%, var(--bg-aurora-tip) 0%, var(--bg-aurora-tip-fade) 100%),
+    radial-gradient(14% 18% at 100% 102%, var(--bg-aurora-tip) 0%, var(--bg-aurora-tip-fade) 100%),
+    radial-gradient(38% 95% at 0% 110%, var(--bg-aurora-soft) 0%, var(--bg-aurora-mid) 20%, var(--bg-aurora-fade) 100%),
+    radial-gradient(38% 95% at 100% 110%, var(--bg-aurora-soft) 0%, var(--bg-aurora-mid) 20%, var(--bg-aurora-fade) 100%),
+    linear-gradient(180deg, transparent 55%, var(--bg-aurora-depth) 100%);
+
+  /* 玻璃层：暗色主题下是「黑玻璃」——白透明很低，靠模糊把底衬成磨砂 */
+  --glass-subtle: rgba(255, 255, 255, 0.035);
+  --glass-base: rgba(255, 255, 255, 0.055);
+  --glass-strong: rgba(255, 255, 255, 0.09);
+  --glass-blur-sm: blur(10px);
+  --glass-blur-md: blur(16px);
+  --glass-blur-lg: blur(24px);
+
+  /* 描边：暗底上用白透明，从几乎看不见到清晰 */
+  --border-faint: rgba(255, 255, 255, 0.055);
+  --border-subtle: rgba(255, 255, 255, 0.09);
+  --border-strong: rgba(255, 255, 255, 0.16);
+
+  /* 文字：四级，全部在墨底上达到 AA */
+  --text-primary: rgba(255, 255, 255, 0.94);
+  --text-secondary: rgba(255, 255, 255, 0.66);
+  --text-tertiary: rgba(255, 255, 255, 0.46);
+  --text-disabled: rgba(255, 255, 255, 0.28);
+  --text-inverse: #0b0a12;
+
+  /* 强调：主操作用蓝，高亮用粉。全站只有这两个强调色 */
+  --accent: var(--palette-blue-400);
+  --accent-hover: var(--palette-blue-300);
+  --accent-soft: rgba(142, 197, 240, 0.14);
+  --accent-border: rgba(142, 197, 240, 0.32);
+  --accent-glow: rgba(142, 197, 240, 0.28);
+
+  --highlight: var(--palette-pink-400);
+  --highlight-hover: var(--palette-pink-300);
+  --highlight-soft: rgba(240, 166, 200, 0.13);
+  --highlight-border: rgba(240, 166, 200, 0.3);
+  --highlight-glow: rgba(240, 166, 200, 0.24);
+
+  /* 状态语义 */
+  --state-success: var(--palette-green-500);
+  --state-success-soft: rgba(52, 211, 153, 0.14);
+  --state-success-border: rgba(52, 211, 153, 0.3);
+  --state-warning: var(--palette-amber-500);
+  --state-warning-soft: rgba(245, 158, 11, 0.14);
+  --state-warning-border: rgba(245, 158, 11, 0.3);
+  --state-danger: var(--palette-rose-500);
+  --state-danger-soft: rgba(244, 63, 94, 0.14);
+  --state-danger-border: rgba(244, 63, 94, 0.3);
+  --state-info: var(--palette-cyan-400);
+  --state-info-soft: rgba(34, 211, 238, 0.14);
+
+  /* 渐变：品牌双色 + 表面微光 + 标题渐隐 */
+  --gradient-brand: linear-gradient(135deg, var(--palette-pink-400), var(--palette-blue-400));
+  --gradient-surface: linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.015));
+  --gradient-heading: linear-gradient(180deg, var(--text-primary) 0%, var(--text-primary) 58%, color-mix(in srgb, var(--text-primary) 34%, transparent) 100%);
+}
+
+/* ---------- 3. 排版刻度 ---------- */
+:root {
+  --font-sans: 'Noto Sans SC', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-serif: 'Noto Serif SC', ui-serif, Georgia, 'Songti SC', serif;
+  --font-mono: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, monospace;
+
+  /* 字号 */
+  --text-display: clamp(2.75rem, 9vw, 5.5rem);
+  --text-3xl: clamp(1.75rem, 3.2vw, 2.25rem);
+  --text-2xl: 1.5rem;
+  --text-xl: 1.25rem;
+  --text-lg: 1.0625rem;
+  --text-base: 0.9375rem;
+  --text-sm: 0.8125rem;
+  --text-xs: 0.75rem;
+  --text-2xs: 0.6875rem;
+
+  /* 行高：中文正文比西文需要更松 */
+  --leading-display: 0.96;
+  --leading-tight: 1.28;
+  --leading-snug: 1.45;
+  --leading-normal: 1.65;
+  --leading-relaxed: 1.85;
+  --leading-loose: 2.05;
+
+  /* 字距：大标题收，小字放 */
+  --tracking-display: -0.035em;
+  --tracking-tight: -0.015em;
+  --tracking-normal: 0;
+  --tracking-wide: 0.04em;
+  --tracking-caps: 0.1em;
+
+  /* 字重 */
+  --weight-light: 300;
+  --weight-normal: 400;
+  --weight-medium: 500;
+  --weight-bold: 700;
+  --weight-black: 900;
+}
+
+/* ---------- 4. 间距 / 圆角 / 阴影 / 运动 ---------- */
+:root {
+  /* 圆角：收敛成四档，原来的 3rem / 2.5rem / 2rem / 1.5rem / 1rem 五档混用 */
+  --radius-xs: 0.5rem;
+  --radius-sm: 0.75rem;
+  --radius-md: 1rem;
+  --radius-lg: 1.5rem;
+  --radius-xl: 2rem;
+  --radius-pill: 999px;
+
+  /* 阴影：暗色主题靠黑度区分层次 */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 8px 24px -8px rgba(0, 0, 0, 0.55);
+  --shadow-lg: 0 20px 48px -16px rgba(0, 0, 0, 0.65);
+  --shadow-glow: 0 0 0 1px var(--accent-border), 0 8px 32px -12px var(--accent-glow);
+
+  /* 动效（与旧 --ease-* / --dur-* 保持同名兼容，值统一） */
+  --ease-standard: cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-decelerate: cubic-bezier(0, 0, 0.2, 1);
+  --ease-accelerate: cubic-bezier(0.4, 0, 1, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --ease-smooth: cubic-bezier(0.25, 0.1, 0.25, 1);
+
+  --dur-instant: 100ms;
+  --dur-fast: 150ms;
+  --dur-normal: 250ms;
+  --dur-slow: 400ms;
+  --dur-entrance: 500ms;
+
+  /* 布局 */
+  --page-max: 80rem;
+  --reading-max: 38em;
+  --content-max: 46rem;
+}
+
+/* ---------- 5. 语义工具类 ---------- */
+
+/* 表面：所有面板/卡片/抽屉都从这里选一档 */
+.surface-base {
+  background-color: var(--bg-raised);
+  background-image: var(--gradient-surface);
+  border: 1px solid var(--border-subtle);
+}
+
+.surface-elevated {
+  background-color: var(--bg-elevated);
+  border: 1px solid var(--border-faint);
+}
+
+.surface-glass {
+  background-color: var(--glass-base);
+  backdrop-filter: var(--glass-blur-md) saturate(150%);
+  -webkit-backdrop-filter: var(--glass-blur-md) saturate(150%);
+  border: 1px solid var(--border-subtle);
+}
+
+.surface-glass-strong {
+  background-color: var(--glass-strong);
+  backdrop-filter: var(--glass-blur-lg) saturate(160%);
+  -webkit-backdrop-filter: var(--glass-blur-lg) saturate(160%);
+  border: 1px solid var(--border-strong);
+}
+
+@supports not (backdrop-filter: blur(16px)) {
+  .surface-glass,
+  .surface-glass-strong {
+    background-color: rgba(18, 16, 28, 0.92);
+  }
+}
+
+/* 遮罩层：模态/抽屉底下的压暗层。
+   不要写 bg-ink/70 —— CSS 变量颜色不支持 Tailwind 的透明度修饰符 */
+.surface-scrim {
+  background-color: var(--bg-scrim);
+}
+
+/* 文字 */
+.text-primary { color: var(--text-primary); }
+.text-secondary { color: var(--text-secondary); }
+.text-tertiary { color: var(--text-tertiary); }
+.text-accent { color: var(--accent); }
+.text-highlight { color: var(--highlight); }
+
+/* 标题排版：中文大标题字距收紧、行高压低 */
+.heading-display {
+  font-family: var(--font-sans);
+  font-size: var(--text-display);
+  font-weight: var(--weight-black);
+  line-height: var(--leading-display);
+  letter-spacing: var(--tracking-display);
+  color: var(--text-primary);
+}
+
+.heading-1 {
+  font-family: var(--font-serif);
+  font-size: var(--text-3xl);
+  font-weight: var(--weight-bold);
+  line-height: var(--leading-tight);
+  letter-spacing: var(--tracking-tight);
+  color: var(--text-primary);
+}
+
+.heading-2 {
+  font-family: var(--font-serif);
+  font-size: var(--text-xl);
+  font-weight: var(--weight-bold);
+  line-height: var(--leading-snug);
+  color: var(--text-primary);
+}
+
+.body-text {
+  font-family: var(--font-sans);
+  font-size: var(--text-base);
+  line-height: var(--leading-normal);
+  color: var(--text-secondary);
+}
+
+.meta-text {
+  font-family: var(--font-sans);
+  font-size: var(--text-xs);
+  line-height: 1.4;
+  letter-spacing: var(--tracking-wide);
+  color: var(--text-tertiary);
+}
+
+.caps-text {
+  font-family: var(--font-sans);
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-bold);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-caps);
+}
+
+/* 按钮：主操作统一蓝，高亮操作才用粉 */
+.btn-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.875rem 1.5rem;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--accent-border);
+  background-color: var(--accent-soft);
+  color: var(--accent-hover);
+  font-family: var(--font-sans);
+  font-size: var(--text-base);
+  font-weight: var(--weight-bold);
+  transition:
+    background-color var(--dur-fast) var(--ease-standard),
+    border-color var(--dur-fast) var(--ease-standard),
+    box-shadow var(--dur-normal) var(--ease-standard),
+    transform var(--dur-instant) var(--ease-standard);
+}
+
+.btn-primary:hover {
+  background-color: rgba(142, 197, 240, 0.22);
+  border-color: var(--accent);
+  box-shadow: 0 8px 24px -10px var(--accent-glow);
+}
+
+.btn-primary:active {
+  transform: scale(0.97);
+}
+
+.btn-primary:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+.btn-ghost {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.625rem 1rem;
+  border-radius: var(--radius-md);
+  border: 1px solid transparent;
+  background-color: transparent;
+  color: var(--text-secondary);
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  transition:
+    background-color var(--dur-fast) var(--ease-standard),
+    color var(--dur-fast) var(--ease-standard),
+    border-color var(--dur-fast) var(--ease-standard);
+}
+
+.btn-ghost:hover {
+  background-color: var(--glass-subtle);
+  border-color: var(--border-subtle);
+  color: var(--text-primary);
+}
+
+/* 徽章：完结/连载、标签、书源等全部复用这一套 */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.25rem 0.625rem;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--border-subtle);
+  background-color: var(--glass-subtle);
+  font-family: var(--font-sans);
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-bold);
+  letter-spacing: var(--tracking-wide);
+  color: var(--text-tertiary);
+  white-space: nowrap;
+}
+
+.badge--success {
+  border-color: var(--state-success-border);
+  background-color: var(--state-success-soft);
+  color: var(--state-success);
+}
+
+.badge--warning {
+  border-color: var(--state-warning-border);
+  background-color: var(--state-warning-soft);
+  color: var(--state-warning);
+}
+
+.badge--accent {
+  border-color: var(--accent-border);
+  background-color: var(--accent-soft);
+  color: var(--accent);
+}
+
+.badge--highlight {
+  border-color: var(--highlight-border);
+  background-color: var(--highlight-soft);
+  color: var(--highlight);
+}
+
+.badge--danger {
+  border-color: var(--state-danger-border);
+  background-color: var(--state-danger-soft);
+  color: var(--state-danger);
+}
+
+/* 大标题渐变：从主文字色渐隐到 34%，替代原来的 from-white via-white to-white/40 */
+.text-gradient-heading {
+  background-image: var(--gradient-heading);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+}
+
+/* 焦点环：键盘可达性，统一色，不再各处 outline-none */
+:where(a, button, input, textarea, select, [tabindex]):focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}

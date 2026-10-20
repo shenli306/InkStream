@@ -1,0 +1,6 @@
+server log so far:    ▲ Next.js 15.5.28 |    - Local:        http://localhost:3100 |    - Network:      http://192.168.10.7:3100 |    - Environments: .env.local |  |  ✓ Starting... |  ✓ Ready in 2.2s | 
+HTTP 200 bytes=12494
+has ink-decoration: false
+has text-content-primary: false
+has heading-display: false
+globals link: none

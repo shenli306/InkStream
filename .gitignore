@@ -22,3 +22,9 @@ next-env.d.ts
 # misc
 .DS_Store
 *.log
+# 本机验证脚手架（CDP 驱动 / 截图 / 参数拟合产物 + Chrome 用户目录，不进仓库）
+.island-*/
+.island-*
+.island-*/**
+.npm-cache/
+.ring-css-test.*

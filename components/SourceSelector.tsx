@@ -101,11 +101,11 @@ const SourceSelectorComponent: React.FC<SourceSelectorProps> = ({ onConfirm, onC
       <div className="source-selector__panel">
         <div className="source-selector__panel-surface">
           <div className="flex items-center justify-center gap-3 mb-5">
-            <div className="flex-1 h-px bg-gradient-to-r from-transparent via-indigo-500/50 to-indigo-500/20" />
-            <h3 className="text-white/60 font-bold text-center text-[10px] uppercase tracking-[0.25em]">
+            <div className="flex-1 h-px bg-gradient-to-r from-transparent via-accent/50 to-accent/20" />
+            <h3 className="text-content-tertiary font-bold text-center text-[10px] uppercase tracking-[0.25em]">
               书源配置
             </h3>
-            <div className="flex-1 h-px bg-gradient-to-l from-transparent via-pink-500/50 to-pink-500/20" />
+            <div className="flex-1 h-px bg-gradient-to-l from-transparent via-highlight/50 to-highlight/20" />
           </div>
 
           <AnimatedContent
@@ -117,15 +117,15 @@ const SourceSelectorComponent: React.FC<SourceSelectorProps> = ({ onConfirm, onC
             {sources.map((source) => (
               <SpotlightCard
                 key={source.name}
-                className="source-selector__item flex items-center justify-between px-4 py-3.5 rounded-xl border border-white/5 bg-white/[0.04] hover:border-indigo-500/30 transition-colors"
+                className="source-selector__item flex items-center justify-between px-4 py-3.5 rounded-xl border border-faint surface-elevated hover:border-accent/30 transition-colors"
                 spotlightRadius={180}
               >
                 <div className="flex items-center gap-3 min-w-0">
                   <span className={`source-selector__status ${source.enabled ? 'source-selector__status--enabled' : ''}`} />
                   <span className="min-w-0">
-                    <span className="block text-sm text-white/80 truncate">{source.name}</span>
+                    <span className="block text-sm text-content-primary truncate">{source.name}</span>
                     {(source.unavailableReason || source.description) && (
-                      <span className={`block mt-0.5 text-[10px] truncate ${source.unavailableReason ? 'text-rose-300/75' : 'text-white/35'}`}>
+                      <span className={`block mt-0.5 text-[10px] truncate ${source.unavailableReason ? 'text-state-danger/75' : 'text-content-tertiary'}`}>
                         {source.unavailableReason || source.description}
                       </span>
                     )}
@@ -148,7 +148,7 @@ const SourceSelectorComponent: React.FC<SourceSelectorProps> = ({ onConfirm, onC
           </AnimatedContent>
 
           <div className="mt-5 flex flex-wrap items-center justify-center gap-3">
-            <span className="text-xs text-white/40">点击左侧光圈确认</span>
+            <span className="text-xs text-content-tertiary">点击左侧光圈确认</span>
           </div>
         </div>
       </div>

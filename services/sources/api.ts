@@ -20,6 +20,23 @@ import { shukugeProvider } from './providers/shukuge';
 import { bqguiProvider } from './providers/bqgui';
 import { qbwxProvider } from './providers/qbwx';
 
+/** 取消就抛它：调用方按「取消」而不是「失败」处理喵~ */
+const throwIfCancelled = (signal?: AbortSignal) => {
+  if (signal?.aborted) throw new DownloadCancelledError();
+};
+
+/** 用户取消下载时抛出的哨兵错误喵~ */
+export class DownloadCancelledError extends Error {
+  constructor(message = '下载已取消') {
+    super(message);
+    this.name = 'DownloadCancelledError';
+  }
+}
+
+/** 取消哨兵 or AbortError 都认成「取消」，用来区分「真失败」喵~ */
+export const isDownloadCancelled = (e: unknown): boolean =>
+  e instanceof DownloadCancelledError || (e instanceof Error && e.name === 'AbortError');
+
 export const searchNovel = async (keyword: string, source: any = 'auto', respectConfig: boolean = true): Promise<Novel[]> => {
   // Check if keyword is a URL
   if (isUrl(keyword)) {
@@ -195,20 +212,38 @@ export const getNovelDetails = async (novel: Novel): Promise<Novel> => {
 
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
-const retry = async <T>(fn: () => Promise<T>, retries = 3, delayMs = 1000, context: string = ''): Promise<T> => {
+/** 可被取消打断的 sleep：取消时立刻醒来，不拖慢取消响应喵~ */
+const sleepWithAbort = (ms: number, signal?: AbortSignal) =>
+  new Promise<void>(resolve => {
+    if (signal?.aborted) return resolve();
+    const timer = setTimeout(resolve, ms);
+    const onAbort = () => { clearTimeout(timer); resolve(); };
+    signal?.addEventListener('abort', onAbort, { once: true });
+  });
+
+const retry = async <T>(fn: () => Promise<T>, retries = 3, delayMs = 1000, context: string = '', signal?: AbortSignal): Promise<T> => {
   try {
     return await fn();
   } catch (error) {
+    // 用户取消：不再退避重试，立刻冒泡喵~
+    if (signal?.aborted) throw error;
     if (retries <= 0) throw error;
     console.warn(`Retry attempt remaining: ${retries} for ${context}. Error: ${error instanceof Error ? error.message : String(error)}`);
-    await delay(delayMs);
+    // 退避也能被取消打断，否则点了取消还要干等 2s 才收尾喵~
+    await sleepWithAbort(delayMs, signal);
     return retry(fn, retries - 1, delayMs * 2, context);
   }
 };
 
-export const downloadAndParseNovel = async (novel: Novel, onProgress: (msg: string, percent: number) => void): Promise<Novel> => {
+export const downloadAndParseNovel = async (
+  novel: Novel,
+  onProgress: (msg: string, percent: number) => void,
+  signal?: AbortSignal,
+): Promise<Novel> => {
   const name = novel.sourceName || '';
   const isScrapable = PROVIDERS.some(p => name.includes(p.name) || name.includes(p.key));
+
+  throwIfCancelled(signal);
 
   if (novel.chapters.length > 0 && isScrapable) {
     onProgress(`准备下载 ${novel.chapters.length} 章...`, 0);
@@ -236,11 +271,14 @@ export const downloadAndParseNovel = async (novel: Novel, onProgress: (msg: stri
     
     const fetchChapter = async (chapter: Chapter) => {
       if (!chapter.url) return;
-      
+      // 取消后：立刻返回，把 pLimit 队列快速排空（不再发新请求）喵~
+      if (signal?.aborted) return;
+
       // 在下载前随机休息一下，假装是真人在翻页喵~
       if (isWanbenge) {
         const jitter = Math.random() * 800 + 300; // 0.3s - 1.1s
-        await new Promise(resolve => setTimeout(resolve, jitter));
+        await sleepWithAbort(jitter, signal);
+        if (signal?.aborted) return;
       }
 
       try {
@@ -271,22 +309,29 @@ export const downloadAndParseNovel = async (novel: Novel, onProgress: (msg: stri
           }
 
           throw new Error(`No provider found for chapter URL: ${chapter.url}`);
-        }, 2, 2000, `Chapter ${chapter.title}`);
+        }, 2, 2000, `Chapter ${chapter.title}`, signal);
 
       } catch (e) {
+        // 取消：不计失败、不上报进度，安静收尾喵~
+        if (signal?.aborted) return;
         console.warn(`Failed to fetch chapter ${chapter.title}`, e);
         chapter.content = "获取失败";
         failedCount++;
       } finally {
         completed++;
-        const percent = Math.floor((completed / novel.chapters.length) * 100);
-        // 每一章都汇报进度，不让主人等得心急喵！
-        onProgress(`下载中: ${chapter.title} (${completed}/${novel.chapters.length}) ${failedCount > 0 ? `[失败${failedCount}]` : ''}`, percent);
+        if (!signal?.aborted) {
+          const percent = Math.floor((completed / novel.chapters.length) * 100);
+          // 每一章都汇报进度，不让主人等得心急喵！
+          onProgress(`下载中: ${chapter.title} (${completed}/${novel.chapters.length}) ${failedCount > 0 ? `[失败${failedCount}]` : ''}`, percent);
+        }
       }
     };
 
     const input = novel.chapters.map(c => limit(() => fetchChapter(c)));
     await Promise.all(input);
+
+    // 队列排空后再判一次：取消时不进入打包阶段喵~
+    throwIfCancelled(signal);
 
     if (failedCount > 0) {
       onProgress(`下载完成，${failedCount} 章失败`, 100);

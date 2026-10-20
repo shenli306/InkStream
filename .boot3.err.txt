@@ -1,0 +1,14 @@
+node.exe : Error: spawn EPERM
+所在位置 行:22 字符: 99
++ ... lyContinue; & "C:\Program Files\nodejs\node.exe" .boot3.cjs 2>&1 | Ou ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (Error: spawn EPERM:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+    at fn (C:\Users\elysia\Documents\InkStream\InkStream-main\.boot3.cjs:11:23)
+    at new Promise (<anonymous>) {
+  errno: -4048,
+  code: 'EPERM',
+  syscall: 'spawn'
+}
+

@@ -7,6 +7,7 @@ import { BQGUI_URL } from '../shared/constants';
 import { parseHTML } from '../shared/dom';
 import { fetchText, proxifyImage } from '../shared/fetcher';
 import { isRelevant } from '../shared/relevance';
+import { cleanChapterLines } from '../shared/textClean';
 
 
 /**
@@ -373,7 +374,8 @@ export const bqguiProvider: SourceProvider = {
                 }
              }
              
-             return cleanText;
+            // 清掉导航残留（← → 之类的装饰行）喵~
+            return cleanChapterLines(cleanText.split('\n')).join('\n\n').trim();
          }
          return null;
      };

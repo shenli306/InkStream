@@ -8,6 +8,7 @@ import { parseHTML } from '../shared/dom';
 import { fetchText, proxifyImage } from '../shared/fetcher';
 import { cleanupSearchCache } from '../shared/cache';
 import { isRelevant } from '../shared/relevance';
+import { cleanChapterLines } from '../shared/textClean';
 
 export const dingdianProvider: SourceProvider = {
   key: 'dingdian',
@@ -280,7 +281,8 @@ export const dingdianProvider: SourceProvider = {
         .replace(/&gt;/g, '>')
         .replace(/&amp;/g, '&');
         
-      const cleanText = text.replace(/<[^>]+>/g, '').trim();
+      // 去掉残留的行首尾箭头装饰，并丢掉纯符号行（与其它书源一致的通用清洗）喵~
+      const cleanText = cleanChapterLines(text.replace(/<[^>]+>/g, '').split('\n')).join('\n\n').trim();
       
       // 检查是否有下一页（分页章节）喵~
       let nextUrl = null;

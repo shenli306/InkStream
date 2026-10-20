@@ -1,124 +1,103 @@
 import React, { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
-  Book,
-  BookOpen,
+  Ban,
   CheckCircle2,
+  ChevronDown,
+  CircleX,
   Download,
   HardDriveDownload,
   Loader2,
-  Music as MusicIcon,
   Search,
 } from 'lucide-react';
 import { AppState } from '../types';
-import type { Music } from '../services/musicSource';
 import '../dynamic-island.css';
 
-type ViewId = 'novel' | 'music' | 'manga';
-type IslandMode = 'compact' | 'pressing' | 'navigation' | 'closing-navigation';
-
-interface MusicInfo {
-  isPlaying: boolean;
-  currentMusic: Music | null;
-  isSearching?: boolean;
-  isDownloading?: boolean;
-  isDownloadComplete?: boolean;
-}
+type ViewId = 'novel';
 
 interface DynamicIslandProps {
   state: AppState;
   progress: number;
   message?: string;
+  /** 当前书名：展开面板里显示，让用户知道正在等哪本书 */
+  title?: string;
   onClick?: () => void;
   onIconClick?: (view: ViewId) => void;
   activeView?: ViewId;
-  musicInfo?: MusicInfo;
+  /** 取消当前任务（展开面板里的按钮） */
+  onCancel?: () => void;
 }
+
+type IslandKind = 'idle' | 'search' | 'progress' | 'packing' | 'success' | 'error';
 
 interface StatusModel {
   expanded: boolean;
-  kind: 'idle' | 'search' | 'progress' | 'packing' | 'success' | 'music' | 'error';
+  kind: IslandKind;
   title: string;
   subtitle?: string;
+  /** 是否可取消：搜索 / 抓取 / 解析 / 打包阶段都能取消 */
+  cancellable: boolean;
 }
-
-const VIEW_ORDER: ViewId[] = ['music', 'novel', 'manga'];
-const VIEW_META: Record<ViewId, { label: string; icon: typeof Book }> = {
-  novel: { label: '小说', icon: Book },
-  manga: { label: '漫画', icon: BookOpen },
-  music: { label: '音乐', icon: MusicIcon },
-};
 
 const getStatusModel = (
   state: AppState,
   showSuccess: boolean,
   message: string | undefined,
-  activeView: ViewId,
-  musicInfo?: MusicInfo,
 ): StatusModel => {
-  if (activeView === 'music' && musicInfo) {
-    if (musicInfo.currentMusic && musicInfo.isPlaying) {
-      return {
-        expanded: true,
-        kind: 'music',
-        title: `${musicInfo.currentMusic.name} - ${musicInfo.currentMusic.artist}`,
-      };
-    }
-    if (musicInfo.isSearching) return { expanded: true, kind: 'search', title: '正在搜索音乐...' };
-    if (musicInfo.isDownloading) return { expanded: true, kind: 'progress', title: '正在下载音乐...' };
-    if (musicInfo.isDownloadComplete) return { expanded: true, kind: 'success', title: '下载完成' };
+  if (showSuccess) {
+    return { expanded: true, kind: 'success', title: '打包完成', subtitle: '文件已开始下载', cancellable: false };
   }
-
-  if (showSuccess) return { expanded: true, kind: 'success', title: '打包完成', subtitle: '文件已开始下载' };
 
   switch (state) {
     case AppState.SEARCHING:
-      return { expanded: true, kind: 'search', title: '正在全网搜索...', subtitle: message };
+      return { expanded: true, kind: 'search', title: '正在全网搜索...', subtitle: message, cancellable: true };
     case AppState.ANALYZING:
-      return { expanded: true, kind: 'search', title: '正在获取下载链接...', subtitle: message };
+      return { expanded: true, kind: 'search', title: '正在获取下载链接...', subtitle: message, cancellable: true };
     case AppState.DOWNLOADING:
-      return { expanded: true, kind: 'progress', title: '正在抓取章节内容', subtitle: message };
+      return { expanded: true, kind: 'progress', title: '正在抓取章节内容', subtitle: message, cancellable: true };
     case AppState.PARSING:
-      return { expanded: true, kind: 'progress', title: '正在解析章节...', subtitle: message };
+      return { expanded: true, kind: 'progress', title: '正在解析章节...', subtitle: message, cancellable: true };
     case AppState.PACKING:
-      return { expanded: true, kind: 'packing', title: '正在打包 EPUB...', subtitle: message };
+      return { expanded: true, kind: 'packing', title: '正在打包 EPUB...', subtitle: message, cancellable: true };
     case AppState.ERROR:
-      return { expanded: true, kind: 'error', title: '出现错误', subtitle: message };
+      return { expanded: true, kind: 'error', title: '出现错误', subtitle: message, cancellable: false };
     default:
-      return { expanded: false, kind: 'idle', title: '' };
+      return { expanded: false, kind: 'idle', title: '', cancellable: false };
   }
 };
 
-const IslandStatusIcon = memo(({ model, progress, musicInfo }: {
+/** 状态 → 辉光色。注入成 --island-tone，CSS 侧只认这一个变量喵~ */
+const TONE: Record<IslandKind, string> = {
+  idle: 'transparent',
+  search: 'var(--accent-glow)',
+  progress: 'var(--highlight-glow)',
+  packing: 'var(--highlight-glow)',
+  success: 'var(--state-success-border)',
+  error: 'var(--state-danger-border)',
+};
+
+const LONG_PRESS_MS = 500;
+const SUCCESS_HOLD_MS = 8000;
+
+const clampPercent = (value: number) => Math.max(0, Math.min(100, Math.round(value)));
+
+const IslandStatusIcon = memo(({ model, progress }: {
   model: StatusModel;
   progress: number;
-  musicInfo?: MusicInfo;
 }) => {
-  if (model.kind === 'music' && musicInfo?.currentMusic) {
-    return (
-      <span className="dynamic-island__album">
-        {musicInfo.currentMusic.cover ? (
-          <img src={musicInfo.currentMusic.cover} alt="" />
-        ) : (
-          <MusicIcon size={18} aria-hidden="true" />
-        )}
-      </span>
-    );
-  }
-
   if (model.kind === 'search') return <Loader2 className="dynamic-island__spinner" size={22} aria-hidden="true" />;
   if (model.kind === 'packing') return <HardDriveDownload size={23} aria-hidden="true" />;
-  if (model.kind === 'success') return <CheckCircle2 className="text-emerald-400" size={24} aria-hidden="true" />;
-  if (model.kind === 'error') return <Search className="text-rose-400" size={22} aria-hidden="true" />;
+  if (model.kind === 'success') return <CheckCircle2 className="dynamic-island__draw" size={24} aria-hidden="true" />;
+  if (model.kind === 'error') return <CircleX size={22} aria-hidden="true" />;
 
   if (model.kind === 'progress') {
-    const safeProgress = Math.max(0, Math.min(100, Math.round(progress)));
+    const safeProgress = clampPercent(progress);
     return (
       <span className="dynamic-island__progress" style={{ '--island-progress': safeProgress } as React.CSSProperties}>
         <svg viewBox="0 0 36 36" aria-hidden="true">
           <circle className="dynamic-island__progress-track" cx="18" cy="18" r="15" />
           <circle className="dynamic-island__progress-value" cx="18" cy="18" r="15" />
         </svg>
-        <Download size={13} aria-hidden="true" />
+        <span className="dynamic-island__percent">{safeProgress}%</span>
       </span>
     );
   }
@@ -126,97 +105,52 @@ const IslandStatusIcon = memo(({ model, progress, musicInfo }: {
   return null;
 });
 
-const NavigationIcons = memo(({ activeView, onSelect, onSwipe, onReset }: {
-  activeView: ViewId;
-  onSelect: (view: ViewId) => void;
-  onSwipe?: (view: ViewId) => void;
-  onReset: () => void;
-}) => {
-  const pointerStartRef = useRef<number | null>(null);
-
-  useEffect(() => {
-    const timer = window.setTimeout(onReset, 10000);
-    return () => window.clearTimeout(timer);
-  }, [onReset]);
-
-  const orderedViews = useMemo(() => {
-    const others = VIEW_ORDER.filter(view => view !== activeView);
-    return [others[0], activeView, others[1]];
-  }, [activeView]);
-
-  const handlePointerDown = (event: React.PointerEvent) => {
-    pointerStartRef.current = event.clientX;
-  };
-
-  const handlePointerUp = (event: React.PointerEvent) => {
-    if (pointerStartRef.current === null) return;
-    const delta = event.clientX - pointerStartRef.current;
-    pointerStartRef.current = null;
-    if (Math.abs(delta) < 40) return;
-    const activeIndex = VIEW_ORDER.indexOf(activeView);
-    const nextIndex = delta < 0
-      ? (activeIndex + 1) % VIEW_ORDER.length
-      : (activeIndex - 1 + VIEW_ORDER.length) % VIEW_ORDER.length;
-    onSwipe?.(VIEW_ORDER[nextIndex]);
-  };
-
-  return (
-    <div
-      className="dynamic-island__navigation"
-      onPointerDown={handlePointerDown}
-      onPointerUp={handlePointerUp}
-      onPointerCancel={() => { pointerStartRef.current = null; }}
-    >
-      {orderedViews.map((view, index) => {
-        const Icon = VIEW_META[view].icon;
-        const isActive = view === activeView;
-        return (
-          <button
-            type="button"
-            key={view}
-            className={`dynamic-island__nav-item dynamic-island__nav-item--${index === 0 ? 'left' : index === 1 ? 'center' : 'right'} dynamic-island__nav-item--${view}`}
-            onClick={() => onSelect(view)}
-            aria-current={isActive ? 'page' : undefined}
-            aria-label={VIEW_META[view].label}
-          >
-            <span className="dynamic-island__nav-icon"><Icon size={20} aria-hidden="true" /></span>
-            <span className="dynamic-island__nav-label">{VIEW_META[view].label}</span>
-          </button>
-        );
-      })}
-    </div>
-  );
-});
-
 const DynamicIslandComponent: React.FC<DynamicIslandProps> = ({
   state,
   progress,
   message,
+  title,
   onClick,
   onIconClick,
-  activeView = 'novel',
-  musicInfo,
+  onCancel,
 }) => {
   const [showSuccess, setShowSuccess] = useState(false);
-  const [mode, setMode] = useState<IslandMode>('compact');
+  const [panelOpen, setPanelOpen] = useState(false);
+  const [pressing, setPressing] = useState(false);
+  // 交替的弹跳 class：切换 animation-name 才能重放动画，且**不能重挂载外壳**
+  // （重挂载会把 width/height 过渡一起打断，尺寸会直接跳）喵~
+  const [bounceTick, setBounceTick] = useState(0);
   const pressTimerRef = useRef<number | null>(null);
-  const closeTimerRef = useRef<number | null>(null);
   const suppressClickRef = useRef(false);
 
+  // COMPLETE → 展示成功态；软超时后收回（点击外壳可提前确认）
   useLayoutEffect(() => {
     if (state !== AppState.COMPLETE) {
       setShowSuccess(false);
       return;
     }
     setShowSuccess(true);
-    const timer = window.setTimeout(() => setShowSuccess(false), 2500);
+    const timer = window.setTimeout(() => setShowSuccess(false), SUCCESS_HOLD_MS);
     return () => window.clearTimeout(timer);
   }, [state]);
 
   const model = useMemo(
-    () => getStatusModel(state, showSuccess, message, activeView, musicInfo),
-    [state, showSuccess, message, activeView, musicInfo],
+    () => getStatusModel(state, showSuccess, message),
+    [state, showSuccess, message],
   );
+
+  const safeProgress = clampPercent(progress);
+
+  // 状态变化 → 外壳弹跳一次（含空闲 → 第一个状态）
+  useEffect(() => {
+    if (!model.expanded) return;
+    setBounceTick((tick) => tick + 1);
+  }, [model.kind, model.expanded]);
+
+  // 任务结束 / 转成不可取消的状态 → 面板自动收起
+  useEffect(() => {
+    if (!model.expanded || !model.cancellable) setPanelOpen(false);
+  }, [model.expanded, model.cancellable]);
 
   useEffect(() => {
     if (!model.expanded) return;
@@ -225,17 +159,12 @@ const DynamicIslandComponent: React.FC<DynamicIslandProps> = ({
       window.clearTimeout(pressTimerRef.current);
       pressTimerRef.current = null;
     }
-    if (closeTimerRef.current !== null) {
-      window.clearTimeout(closeTimerRef.current);
-      closeTimerRef.current = null;
-    }
     suppressClickRef.current = false;
-    setMode('compact');
+    setPressing(false);
   }, [model.expanded]);
 
   useEffect(() => () => {
     if (pressTimerRef.current !== null) window.clearTimeout(pressTimerRef.current);
-    if (closeTimerRef.current !== null) window.clearTimeout(closeTimerRef.current);
   }, []);
 
   const cancelPress = useCallback(() => {
@@ -243,81 +172,139 @@ const DynamicIslandComponent: React.FC<DynamicIslandProps> = ({
       window.clearTimeout(pressTimerRef.current);
       pressTimerRef.current = null;
     }
-    setMode(current => current === 'pressing' ? 'compact' : current);
+    setPressing(false);
   }, []);
 
   const startPress = useCallback(() => {
-    if (model.expanded || mode !== 'compact') return;
+    if (model.expanded) return;
     suppressClickRef.current = false;
-    setMode('pressing');
+    setPressing(true);
     pressTimerRef.current = window.setTimeout(() => {
+      // 视图只剩小说一个，长按不再展开切换面板，只重置到搜索首页
       suppressClickRef.current = true;
       pressTimerRef.current = null;
-      setMode('navigation');
-    }, 500);
-  }, [model.expanded, mode]);
-
-  const closeNavigation = useCallback(() => {
-    if (closeTimerRef.current !== null) window.clearTimeout(closeTimerRef.current);
-    setMode('closing-navigation');
-    closeTimerRef.current = window.setTimeout(() => {
-      closeTimerRef.current = null;
-      setMode('compact');
-    }, 220);
-  }, []);
-
-  const selectView = useCallback((view: ViewId) => {
-    onIconClick?.(view);
-    closeNavigation();
-  }, [closeNavigation, onIconClick]);
-
-  const swipeView = useCallback((view: ViewId) => {
-    onIconClick?.(view);
-  }, [onIconClick]);
+      setPressing(false);
+      onIconClick?.('novel');
+    }, LONG_PRESS_MS);
+  }, [model.expanded, onIconClick]);
 
   const handleClick = useCallback(() => {
     if (suppressClickRef.current) {
       suppressClickRef.current = false;
       return;
     }
+    // 展开态 + 可取消：点击是「展开/收起面板」，不再抢「回到顶部」
+    if (model.expanded && model.cancellable) {
+      setPanelOpen((open) => !open);
+      return;
+    }
     onClick?.();
-  }, [onClick]);
+  }, [model.expanded, model.cancellable, onClick]);
 
-  const navigationVisible = !model.expanded && (mode === 'navigation' || mode === 'closing-navigation');
+  const handleCancel = useCallback((event: React.MouseEvent) => {
+    event.stopPropagation();
+    setPanelOpen(false);
+    onCancel?.();
+  }, [onCancel]);
 
   return (
-    <div className="dynamic-island" aria-label="灵动岛">
-      {navigationVisible ? (
-        <div className={`dynamic-island__navigation-shell ${mode === 'closing-navigation' ? 'dynamic-island__navigation-shell--closing' : ''}`}>
-          <NavigationIcons activeView={activeView} onSelect={selectView} onSwipe={swipeView} onReset={closeNavigation} />
-        </div>
-      ) : (
+    <div className={`dynamic-island dynamic-island--${model.kind}`}>
+      <div className="dynamic-island__anchor">
+        {!model.expanded && (
+          <button
+            type="button"
+            className="dynamic-island__hitpad"
+            onClick={handleClick}
+            onPointerDown={startPress}
+            onPointerUp={cancelPress}
+            onPointerLeave={cancelPress}
+            onPointerCancel={cancelPress}
+            aria-label="回到搜索"
+          />
+        )}
+
         <button
           type="button"
-          className={`dynamic-island__shell ${model.expanded ? 'dynamic-island__shell--expanded' : ''} ${mode === 'pressing' ? 'dynamic-island__shell--pressing' : ''}`}
+          className={[
+            'dynamic-island__shell',
+            `dynamic-island__shell--${model.kind}`,
+            model.expanded ? 'dynamic-island__shell--expanded' : '',
+            model.expanded ? 'dynamic-island__shell--anim' : '',
+            pressing ? 'dynamic-island__shell--pressing' : '',
+          ].filter(Boolean).join(' ')}
+          data-bounce={bounceTick % 2}
+          style={{ '--island-tone': TONE[model.kind] } as React.CSSProperties}
           onClick={handleClick}
           onPointerDown={startPress}
           onPointerUp={cancelPress}
           onPointerLeave={cancelPress}
           onPointerCancel={cancelPress}
-          aria-label={model.expanded ? model.title : '长按打开功能切换'}
+          aria-label={model.expanded ? model.title : '点击回到搜索'}
+          aria-expanded={model.cancellable ? panelOpen : undefined}
         >
+          <span className="dynamic-island__press-ring" aria-hidden="true" />
           <span className="dynamic-island__idle-indicator" aria-hidden="true" />
-          <span className="dynamic-island__press-track" aria-hidden="true"><span /></span>
+
+          <span className="dynamic-island__hint" aria-hidden="true">
+            <Search size={12} />
+            回到搜索
+          </span>
 
           <span className="dynamic-island__content">
             <span className="dynamic-island__status-icon">
-              <IslandStatusIcon model={model} progress={progress} musicInfo={musicInfo} />
+              <IslandStatusIcon model={model} progress={progress} />
             </span>
             <span className="dynamic-island__copy">
-              <span className={`dynamic-island__title ${model.kind === 'music' ? 'dynamic-island__title--marquee' : ''}`}>
+              <span className="dynamic-island__title">
                 {model.title}
               </span>
               {model.subtitle && <span className="dynamic-island__subtitle">{model.subtitle}</span>}
             </span>
+            {model.cancellable && (
+              <span className="dynamic-island__chevron" aria-hidden="true">
+                <ChevronDown size={15} />
+              </span>
+            )}
           </span>
         </button>
-      )}
+
+        {/* 屏幕阅读器播报：单独放一层，避免嵌在 button 里被吞掉 */}
+        <span className="dynamic-island__sr" role="status" aria-live="polite">
+          {model.title}{model.subtitle ? `，${model.subtitle}` : ''}
+        </span>
+
+        <div
+          className={`dynamic-island__panel${panelOpen ? ' dynamic-island__panel--open' : ''}`}
+          aria-hidden={!panelOpen}
+        >
+          <span className="dynamic-island__panel-title">
+            <Download size={13} aria-hidden="true" />
+            {title || model.title}
+          </span>
+
+          <span className="dynamic-island__panel-bar" aria-hidden="true">
+            <span
+              className="dynamic-island__panel-fill"
+              style={{ '--island-fill': safeProgress } as React.CSSProperties}
+            />
+          </span>
+
+          <span className="dynamic-island__panel-meta">
+            <span className="dynamic-island__panel-percent">{safeProgress}%</span>
+            <span className="dynamic-island__panel-msg">{message || model.subtitle || '处理中...'}</span>
+          </span>
+
+          <button
+            type="button"
+            className="dynamic-island__panel-cancel"
+            onClick={handleCancel}
+            disabled={!onCancel}
+          >
+            <Ban size={13} aria-hidden="true" />
+            取消下载
+          </button>
+        </div>
+      </div>
     </div>
   );
 };
