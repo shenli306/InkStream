@@ -53,10 +53,12 @@ export const generateEpub = async (novel: Novel, coverBlob?: Blob): Promise<Blob
   let coverItem = "";
   let coverMeta = "";
   if (coverBlob) {
-    const ext = coverBlob.type.includes('png') ? 'png' : 'jpg';
+    const mime = coverBlob.type || 'image/jpeg';
+    // 扩展名必须跟 media-type 一致，否则 EPUBCheck 与部分阅读器会告警：webp 封面不能还叫 cover.jpg 喵~
+    const ext = mime.includes('png') ? 'png' : mime.includes('webp') ? 'webp' : mime.includes('gif') ? 'gif' : 'jpg';
     const filename = `cover.${ext}`;
     oebps.file(filename, coverBlob);
-    coverItem = `<item id="cover-image" href="${filename}" media-type="${coverBlob.type}" properties="cover-image"/>`;
+    coverItem = `<item id="cover-image" href="${filename}" media-type="${mime}" properties="cover-image"/>`;
     coverMeta = `<meta name="cover" content="cover-image"/>`;
   }
 

@@ -37,6 +37,18 @@ export class DownloadCancelledError extends Error {
 export const isDownloadCancelled = (e: unknown): boolean =>
   e instanceof DownloadCancelledError || (e instanceof Error && e.name === 'AbortError');
 
+/**
+ * 每源搜索超时（毫秒）喵~
+ *
+ * 默认 8s 是为了不让慢源拖住聚合搜索；但爱丽丝书屋的搜索要抓 3 页搜索结果，
+ * 经 /api/proxy 单页实测 1.5~3s，8s 会周期性把整个源的 27 条结果丢成 0 条，
+ * 所以这里按源单独给额度喵~
+ */
+const DEFAULT_SEARCH_TIMEOUT_MS = 8000;
+const SEARCH_TIMEOUT_MS: Record<string, number> = {
+  '爱丽丝书屋': 15000,
+};
+
 export const searchNovel = async (keyword: string, source: any = 'auto', respectConfig: boolean = true): Promise<Novel[]> => {
   // Check if keyword is a URL
   if (isUrl(keyword)) {
@@ -78,13 +90,14 @@ export const searchNovel = async (keyword: string, source: any = 'auto', respect
       return [] as Novel[];
     });
 
-    // 8 秒超时，超时后返回空数组，不让它拖慢整体速度喵~
+    // 每源搜索超时：超时后返回空数组，不让它拖慢整体速度喵~
+    const searchTimeoutMs = SEARCH_TIMEOUT_MS[p.name] ?? DEFAULT_SEARCH_TIMEOUT_MS;
     let timeoutId: ReturnType<typeof setTimeout>;
     const timeoutPromise = new Promise<Novel[]>((resolve) => {
       timeoutId = setTimeout(() => {
-        console.warn(`[Search] ${p.name} timed out after 8s 喵~`);
+        console.warn(`[Search] ${p.name} timed out after ${searchTimeoutMs / 1000}s 喵~`);
         resolve([]);
-      }, 8000);
+      }, searchTimeoutMs);
     });
 
     return Promise.race([searchPromise, timeoutPromise]).finally(() => clearTimeout(timeoutId));

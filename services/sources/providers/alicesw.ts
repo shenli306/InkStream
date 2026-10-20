@@ -11,6 +11,32 @@ import { getCoverCache, saveCoverCache } from '../shared/coverCache';
 import { cleanChapterLines } from '../shared/textClean';
 
 
+const ALICESW_COVER_ORIGIN = 'https://www.alicesw.com';
+
+/**
+ * 封面地址归一化喵~
+ *
+ * 站点同时用两个图床：源站 www.alicesw.com 与 CDN img.321cdn.com。
+ * 实测（2026-10）CDN 只镜像了一部分对象：同一个 /uploads/20251224/xxxx.webp
+ * 在 CDN 上 404、在源站 200；而 /img/62.webp 这类站点内置图只在 CDN 上有。
+ * 所以 /uploads/** 一律指到源站，其余（/img/** 等）保持原样。
+ */
+const normalizeCoverUrl = (raw: string): string => {
+  const m = raw.match(/^https?:\/\/(?:img\.321cdn\.com|(?:www\.)?alicesw\.com)(\/.*)$/i);
+  if (m && m[1].startsWith('/uploads/')) return `${ALICESW_COVER_ORIGIN}${m[1]}`;
+  return raw;
+};
+
+/**
+ * 目录里的「第X卷 完）」是分卷标记，不是章节喵~
+ *
+ * 实测第一~六卷的「完）」全都返回同一张 23554B 的卷末页，当成章节会白抓一遍、
+ * 还会被计进灵动岛的失败数（[失败N]），所以解析目录时直接丢掉喵~
+ */
+const isVolumeMarker = (title: string): boolean => {
+  const t = title.replace(/\s+/g, ' ').trim();
+  return t.length <= 12 && /^第[一二三四五六七八九十百千0-9]+卷[\s、]*完[）)]?$/.test(t);
+};
 export const aliceswProvider: SourceProvider = {
   key: 'alicesw',
   name: '爱丽丝书屋',
@@ -30,92 +56,119 @@ export const aliceswProvider: SourceProvider = {
         .trim();
     };
     
-    for (let page = 1; page <= 3; page++) {
-      try {
-        const searchUrl = `${ALICESW_URL}/search?q=${encodeURIComponent(keyword)}&f=_all&sort=relevance&p=${page}&serialize=`;
-        console.log(`[AliceSw] Fetching page ${page}: ${searchUrl}喵~`);
-        
-        const html = await fetchText(searchUrl);
-        
-        if (!html || html.length < 200) {
-          console.log(`[AliceSw] Page ${page} returned empty result, stopping pagination喵~`);
-          break;
-        }
-        
-        const doc = parseHTML(html);
-        
-        // 搜索结果结构：每个结果在 <h4><a href="/novel/xxx.html">标题</a></h4>
-        const titleElements = doc.querySelectorAll('h4 a, h3 a, h5 a');
-        console.log(`[AliceSw] Page ${page} found ${titleElements.length} title elements喵~`);
-        
-        titleElements.forEach(el => {
-          const href = el.getAttribute('href') || '';
-          if (!href.includes('/novel/') && !href.includes('/book/')) return;
-          
-          const rawTitle = el.textContent?.trim() || '';
-          const title = cleanTitle(rawTitle);
-          if (!title || title.length < 2) return;
-          
-          let detailUrl = href.startsWith('http') ? href : `${ALICESW_URL}${href.startsWith('/') ? '' : '/'}${href}`;
-          
-          if (results.some(r => r.detailUrl === detailUrl)) return;
-          
-          // 从父容器提取作者和简介
-          let author = '未知';
-          let description = '';
-          let coverUrl = 'https://img.321cdn.com/img/01.png';
-          
-          // 根据HTML结构提取数据（.list-group-item 结构）
-          const listItem = el.closest('.list-group-item');
-          if (listItem) {
-            // 提取作者
-            const authorEl = listItem.querySelector('p.mb-1 a');
-            if (authorEl) {
-              author = authorEl.textContent?.trim() || '未知';
-            }
-            
-            // 提取简介 - 匹配 class="content-txt" 的段落
-            const descEl = listItem.querySelector('p.content-txt');
-            if (descEl) {
-              const descText = descEl.textContent?.trim() || '';
-              if (descText && descText.length > 5 && descText !== '暂无简介') {
-                description = descText.substring(0, 200) || '';
-              }
-            }
-            
-            // 爱丽丝书屋搜索结果页面没有封面图片
-            // 封面需要从详情页获取
+    // 搜索页 1~3 并发抓取喵~
+    // 串行时每页要一次 RTT（经 /api/proxy 实测每页 1.5~3s），三页累计经常撞上
+    // api.ts 里的每源搜索超时，结果整个源的结果被丢掉，所以这里改成并发喵~
+    const buildSearchUrl = (page: number) =>
+      `${ALICESW_URL}/search?q=${encodeURIComponent(keyword)}&f=_all&sort=relevance&p=${page}&serialize=`;
+
+    const parseSearchPage = (html: string): { items: Novel[]; titleCount: number } => {
+      const doc = parseHTML(html);
+
+      // 搜索结果结构：每个结果在 <h4><a href="/novel/xxx.html">标题</a></h4>
+      const titleElements = doc.querySelectorAll('h4 a, h3 a, h5 a');
+      const items: Novel[] = [];
+
+      titleElements.forEach(el => {
+        const href = el.getAttribute('href') || '';
+        if (!href.includes('/novel/') && !href.includes('/book/')) return;
+
+        const rawTitle = el.textContent?.trim() || '';
+        const title = cleanTitle(rawTitle);
+        if (!title || title.length < 2) return;
+
+        let detailUrl = href.startsWith('http') ? href : `${ALICESW_URL}${href.startsWith('/') ? '' : '/'}${href}`;
+
+        if (items.some(r => r.detailUrl === detailUrl)) return;
+
+        // 从父容器提取作者、简介、连载状态、标签
+        let author = '未知';
+        let description = '';
+        // 搜索列表页没有封面（真封面只在详情页 / img.321cdn.com/uploads/ 下），
+        // 之前写死的 img/01.png 是站点占位图，会被 isPlaceholderCoverUrl 之外的路径带进 EPUB 喵~
+        let coverUrl = '';
+        let status: Novel['status'] = 'Unknown';
+        let tags: string[] = [];
+
+        // 根据HTML结构提取数据（.list-group-item 结构）
+        const listItem = el.closest('.list-group-item');
+        if (listItem) {
+          // 提取作者
+          const authorEl = listItem.querySelector('p.mb-1 a');
+          if (authorEl) {
+            author = authorEl.textContent?.trim() || '未知';
           }
-          
-          if (!isRelevant(title, author, keyword)) return;
-          
-          results.push({
-            id: detailUrl,
-            title,
-            author,
-            description,
-            coverUrl: proxifyImage(coverUrl),
-            tags: [],
-            status: 'Unknown',
-            detailUrl,
-            chapters: [],
-            sourceName: '爱丽丝书屋'
-          });
-        });
-        
-        console.log(`[AliceSw] Page ${page} total results so far: ${results.length}喵~`);
-        
-        // 如果当前页结果少于10条，说明没有更多页了
-        if (titleElements.length < 10) {
-          console.log(`[AliceSw] Page ${page} has less than 10 results, stopping pagination喵~`);
-          break;
+
+          // 提取简介 - 匹配 class="content-txt" 的段落
+          const descEl = listItem.querySelector('p.content-txt');
+          if (descEl) {
+            const descText = descEl.textContent?.trim() || '';
+            if (descText && descText.length > 5 && descText !== '暂无简介') {
+              description = descText.substring(0, 200) || '';
+            }
+          }
+
+          // 连载状态：<small class="text-muted ms-2">[已完结]</small>
+          const stateText = listItem.querySelector('small')?.textContent?.trim() || '';
+          if (stateText.includes('完结')) status = 'Completed';
+          else if (stateText.includes('连载')) status = 'Serializing';
+
+          // 标签：<a href="/search?q=..&f=tag"><span>#</span><em>斗破</em></a>
+          tags = Array.from(listItem.querySelectorAll('a[href*="f=tag"]'))
+            .map(tagEl => (tagEl.textContent?.trim() || '').replace(/^#\s*/, '').trim())
+            .filter(tag => tag.length > 0 && tag.length < 20)
+            .slice(0, 6);
+
+          // 爱丽丝书屋搜索结果页面没有封面图片
+          // 封面需要从详情页获取（getDetails 会补上）
         }
-      } catch (e) {
-        console.warn(`[AliceSw] Page ${page} fetch failed: ${e}喵~`);
-        break;
+
+        if (!isRelevant(title, author, keyword)) return;
+
+        items.push({
+          id: detailUrl,
+          title,
+          author,
+          description,
+          coverUrl: coverUrl ? proxifyImage(normalizeCoverUrl(coverUrl)) : undefined,
+          tags,
+          status,
+          detailUrl,
+          chapters: [],
+          sourceName: '爱丽丝书屋'
+        });
+      });
+
+      return { items, titleCount: titleElements.length };
+    };
+
+    const pageResults = await Promise.all([1, 2, 3].map(async (page) => {
+      try {
+        const html = await fetchText(buildSearchUrl(page));
+        if (!html || html.length < 200) {
+          console.log(`[AliceSw] Page ${page} returned empty result喵~`);
+          return { page, items: [] as Novel[], more: false };
+        }
+        const parsed = parseSearchPage(html);
+        console.log(`[AliceSw] Page ${page} found ${parsed.titleCount} title elements, ${parsed.items.length} relevant喵~`);
+        return { page, items: parsed.items, more: parsed.titleCount >= 10 };
+      } catch (err) {
+        console.warn(`[AliceSw] Page ${page} fetch failed: ${err}喵~`);
+        return { page, items: [] as Novel[], more: false };
       }
+    }));
+
+    // 合并顺序与串行版一致：页码小的先入，重复 URL 只留一次；
+    // 某一页不足 10 条就不再接收后面的页（与原来的 break 语义相同）喵~
+    const seenUrls = new Set<string>();
+    for (const pr of pageResults.sort((a, b) => a.page - b.page)) {
+      for (const novel of pr.items) {
+        if (seenUrls.has(novel.detailUrl)) continue;
+        seenUrls.add(novel.detailUrl);
+        results.push(novel);
+      }
+      if (!pr.more) break;
     }
-    
     console.log(`[AliceSw] Total search results: ${results.length}喵~`);
     
     // 从本地缓存恢复封面（只恢复/uploads/下的真实封面）喵~
@@ -279,13 +332,14 @@ export const aliceswProvider: SourceProvider = {
       if (!coverSrc.startsWith('http') && !coverSrc.startsWith('data:')) {
         coverSrc = 'https://www.alicesw.com' + (coverSrc.startsWith('/') ? coverSrc : '/' + coverSrc);
       }
-      novel.coverUrl = proxifyImage(coverSrc);
+      novel.coverUrl = proxifyImage(normalizeCoverUrl(coverSrc));
       saveCoverCache(novel.title, novel.coverUrl);
       console.log(`[AliceSw] Cover saved: ${novel.coverUrl}喵~`);
-    } else {
-      console.log(`[AliceSw] No valid cover found, using default 01.png喵~`);
-      const defaultCover = 'https://img.321cdn.com/img/01.png';
-      novel.coverUrl = proxifyImage(defaultCover);
+    } else if (!novel.coverUrl || novel.coverUrl.includes('img/01.png')) {
+      // 详情页也没找到封面就保持空值：BookCard 会渲染内置占位，
+      // 比塞站点占位图（img/01.png）干净，也避免 EPUB 里带一张广告图喵~
+      console.log(`[AliceSw] No valid cover found, leave empty喵~`);
+      novel.coverUrl = undefined;
     }
     
     const jianjieEl = doc.querySelector('.jianjie');
@@ -316,7 +370,7 @@ export const aliceswProvider: SourceProvider = {
       const isChapter = (text.includes('第') && text.includes('章')) || 
                        (href.includes('/book/') && href.includes('.html') && !href.includes('/novel/'));
       
-      if (isChapter) {
+      if (isChapter && !isVolumeMarker(text)) {
         console.log(`[AliceSw] Found potential chapter: "${text}" -> ${href}喵~`);
         const fullUrl = href.startsWith('http') ? href : new URL(href, novel.detailUrl).href;
         if (!chapters.find(c => c.url === fullUrl)) {
@@ -352,7 +406,9 @@ export const aliceswProvider: SourceProvider = {
           console.log(`[AliceSw] Fetched all chapters page, length: ${allChaptersHtml.length}喵~`);
           
           // 从所有章节页面获取章节
-          const allChaptersLinks = allChaptersDoc.querySelectorAll('a');
+          // 目录页首选 ul.mulu_list li a（实测与全部 /book/ 链接数量一致，但不会夹带站内导航）喵~
+          const muluLinks = allChaptersDoc.querySelectorAll('ul.mulu_list li a');
+          const allChaptersLinks = muluLinks.length > 0 ? muluLinks : allChaptersDoc.querySelectorAll('a');
           const newChapters: Chapter[] = [];
           
           allChaptersLinks.forEach(link => {
@@ -363,7 +419,7 @@ export const aliceswProvider: SourceProvider = {
             const isChapter = (text.includes('第') && text.includes('章')) || 
                              (href.includes('/book/') && href.includes('.html') && !href.includes('/novel/'));
             
-            if (isChapter) {
+            if (isChapter && !isVolumeMarker(text)) {
               console.log(`[AliceSw] Found chapter from all-chapters page: "${text}" -> ${href}喵~`);
               const fullUrl = href.startsWith('http') ? href : new URL(href, allChaptersUrl).href;
               if (!newChapters.find(c => c.url === fullUrl)) {
@@ -458,16 +514,30 @@ export const aliceswProvider: SourceProvider = {
     
     const parseContent = (html: string): string | null => {
       const doc = parseHTML(html);
+      // 同一章 URL 有两套模板喵~
+      // 桌面 UA: #j_chapterBox .read-content；移动 WAP UA: article#chapterContent > section.read-section > div.content_txt
+      // （代理出去的 UA 就是浏览器真实 UA，PC 上和手机上会落到不同模板）
       const contentEl = doc.querySelector('#j_chapterBox .read-content') ||
                       doc.querySelector('#j_chapterBox .main-text-wrap') ||
                       doc.querySelector('.read-content') ||
+                      doc.querySelector('.read-section.jsChapterWrapper .content_txt') ||
+                      doc.querySelector('.read-section .content_txt') ||
+                      doc.querySelector('.content_txt') ||
                       doc.querySelector('.text-content') ||
                       doc.querySelector('#content') || 
                       doc.querySelector('.content') || 
+                      doc.querySelector('article .read-section') ||
                       doc.querySelector('article');
       
       if (contentEl) {
-        contentEl.querySelectorAll('script, style, ins, .ads, .ad, .advertisement, .bottem1, .bottem2, .bottem3, .bottem, a').forEach(el => el.remove());
+        // 桌面模板的翻页导航/广告 + 移动 WAP 模板的加载器、页顶页脚与 #user_ad 广告位一起摘掉喵~
+        contentEl.querySelectorAll([
+          'script', 'style', 'ins', '.ads', '.ad', '.advertisement',
+          '.bottem1', '.bottem2', '.bottem3', '.bottem', 'a',
+          '#user_ad', '.read-load-prev', '.read-load-next', '.read-load-p',
+          '.read-page-mark', '.read-book-name', '.read-page-opt', '.read-page-top',
+          '.read-opt-header', 'nav', 'header'
+        ].join(',')).forEach(el => el.remove());
         
         let text = contentEl.innerHTML
           .replace(/<br\s*\/?>/gi, '\n')
@@ -488,11 +558,29 @@ export const aliceswProvider: SourceProvider = {
           '章节报错', '免登录', '推荐本书', '加入书架', '章节加载中', '加载中...'
         ];
         
+        // 移动 WAP 模板的 <h3> 章节名会被一起选中（桌面模板的 h3 在 .read-content 之外，不受影响），
+        // EPUB 每章正文已经自带 <h1>标题</h1>，所以首行等于章节名就丢掉喵~
+        const norm = (s: string) => s.replace(/[\s\u3000]/g, '');
+        const titleNorm = norm(chapter.title || '');
+        if (titleNorm.length >= 4) {
+          const head = cleanText.split('\n').find(l => l.trim().length > 0) || '';
+          const headNorm = norm(head);
+          if (
+            headNorm.length >= 4 &&
+            (headNorm === titleNorm || titleNorm.endsWith(headNorm) || headNorm.endsWith(titleNorm))
+          ) {
+            cleanText = cleanText.replace(head, '');
+          }
+        }
+        
         const lines = cleanChapterLines(cleanText.split('\n'))
           .filter(line => {
             if (line.length === 0) return false;
             if (line.length < 20) {
-              const navTerms = ['目录', '上一页', '下一页', '尾页', '首页', '返回目录'];
+              const navTerms = [
+                '目录', '上一页', '下一页', '尾页', '首页', '返回目录',
+                '上一章', '下一章', '章节目录', '投推荐票', '加入书签', '返回书页', '加入书架'
+              ];
               if (navTerms.some(term => line === term)) return false;
             }
             return !junkKeywords.some(kw => line.includes(kw));
@@ -506,16 +594,16 @@ export const aliceswProvider: SourceProvider = {
     };
     
     // 1. 优先尝试直接 fetch 喵~
+    //    正文是服务端渲染的（实测 #j_chapterBox .read-content 直接就有几千字），
+    //    所以判据只看「正文解析结果」，不要在整页里搜「加载中...」——
+    //    章节页 #j_catalogListWrap .loading 里那处隐藏的「加载中...」会让整页匹配恒为真，
+    //    于是每章都被推去 browser API 兜底（Vercel 上没有该接口 → 直接失败）喵~
     try {
       const html = await fetchText(chapter.url);
-      const isLoadingPage = html.includes('章节加载中') || html.includes('加载中...');
-      
-      if (!isLoadingPage) {
-        const content = parseContent(html);
-        if (content) {
-          console.log(`[AliceSw] Direct content fetch successful喵~`);
-          return content;
-        }
+      const content = parseContent(html);
+      if (content && content.length >= 30) {
+        console.log(`[AliceSw] Direct content fetch successful喵~`);
+        return content;
       }
     } catch (e) {
       console.warn("[AliceSw] Direct content fetch failed, fallback to browser", e);

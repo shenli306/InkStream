@@ -66,6 +66,16 @@ export const fetchText = async (url: string, options?: RequestInit, encoding = '
     if (isAbortRequested()) throw abortError();
 
     const external = activeAbortSignal;
+
+    // 全局限流 + 按 host 串行闸门喵~
+    // 浏览器端才需要（Node 端没有并发连接数限制，也不该被 UI 拖慢）喵~
+    // 顺序很关键：**先排队拿到闸门，再起 15s 超时**。
+    // 反过来的话，多章书（如 45 章）排队时排在后面的请求会在还没发出请求时
+    // 就把 15s 预算烧完、被 abort 掉，表现成大量「获取章节内容失败」+ AbortError 重试喵~
+    const isBrowser = typeof window !== 'undefined';
+    const releaseGlobal = isBrowser ? await acquireGlobalSlot(external) : () => {};
+    const releaseHost = isBrowser ? await acquireHostSlot(hostOf(targetUrl) || 'unknown', external) : () => {};
+
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 15000);
     // 外部取消（用户点了取消下载）→ 立刻掐断本次请求喵~
@@ -74,12 +84,6 @@ export const fetchText = async (url: string, options?: RequestInit, encoding = '
       if (external.aborted) controller.abort();
       else external.addEventListener('abort', onExternalAbort, { once: true });
     }
-
-    // 全局限流 + 按 host 串行闸门喵~
-    // 浏览器端才需要（Node 端没有并发连接数限制，也不该被 UI 拖慢）喵~
-    const isBrowser = typeof window !== 'undefined';
-    const releaseGlobal = isBrowser ? await acquireGlobalSlot(external) : () => {};
-    const releaseHost = isBrowser ? await acquireHostSlot(hostOf(targetUrl) || 'unknown', external) : () => {};
 
     try {
       if (isAbortRequested()) throw abortError();

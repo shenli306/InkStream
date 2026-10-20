@@ -23,6 +23,8 @@ next-env.d.ts
 .DS_Store
 *.log
 # 本机验证脚手架（CDP 驱动 / 截图 / 参数拟合产物 + Chrome 用户目录，不进仓库）
+# 爱丽丝书屋 API 侦察取样（本机 scratch）
+/.alicesw/
 .island-*/
 .island-*
 .island-*/**

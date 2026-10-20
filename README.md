@@ -109,11 +109,14 @@ sources/huanmengacg.json      Legado 书源规则样例
 | 书库阁 | http://www.shukuge.com | 章节页 `#content` 有嵌套导航，已做残渣清洗 |
 | 笔趣阁(GUI) | https://www.bqgicq.cc | 多域名备份（`BQGUI_HOSTS`） |
 | 全本文学 | https://www.qbwx.org | 正则解析，不做 DOM |
+| 爱丽丝书屋 | https://www.alicesw.com | 成人向书库；搜索页 1~3 并发抓取、全量目录 `/other/chapters/id/{id}.html`，正文同时兼容桌面与 WAP 两套模板 |
 | 本地书库 | `downloads/` | 只搜已下载文件，数据来自 `/api/list-downloads` |
 
-**代码保留但默认置灰**（`SOURCE_UNAVAILABLE_REASONS`）：完本阁（`.jizai22.com` 域名不可达）、顶点小说网（原域名 DNS 失效）、爱丽丝书屋（连接持续超时）。它们仍可通过 `getProviderByName` 单独调用。
+**代码保留但默认置灰**（`SOURCE_UNAVAILABLE_REASONS`）：完本阁（`.jizai22.com` 域名不可达）、顶点小说网（原域名 DNS 失效）。它们仍可通过 `getProviderByName` 单独调用。
 
-书源开关存在 `localStorage` 的 `inkstream_source_config`；新增书源：在 `services/sources/providers/` 写实现 → 在 `registry.ts` 的 `PROVIDERS` 注册 → 在 `services/sources/index.ts` 按需导出。
+> 爱丽丝书屋在部分网络环境下本机直连会超时：让**本机整机流量**走你自己的代理即可（浏览器侧的事），代码里不配置任何服务端代理；部署到 Vercel 后直连可达。
+
+书源开关存在 `localStorage` 的 `inkstream_source_config_v2`；新增书源：在 `services/sources/providers/` 写实现 → 在 `registry.ts` 的 `PROVIDERS` 注册 → 在 `services/sources/index.ts` 按需导出。
 
 ## 🛡️ 抓取层
 
@@ -138,7 +141,7 @@ sources/huanmengacg.json      Legado 书源规则样例
 - `docs/legado-source-converter.md` — Legado 书源规则转换
 - `docs/agents/` — issue tracker / triage 标签 / 领域文档约定
 - `CLAUDE.md` — agent 技能与仓库约定
-- `CONTEXT.md` — 领域术语表（注：仍写着漫画 / 弹幕，待更新）
+- `CONTEXT.md` — 领域术语表（InkStream / Source / Provider / Chapter / EPUB / DynamicIsland …）
 
 ## ☁️ 部署到 Vercel
 
