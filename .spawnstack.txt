@@ -1,2 +1,0 @@
-=== start 2026-10-19T16:07:57.948Z args: ["C:\\Program Files\\nodejs\\node.exe","C:\\Users\\elysia\\Documents\\InkStream\\InkStream-main\\.nexthack2.cjs","dev","--port","3000"]
-=== start 2026-10-19T16:08:05.349Z args: ["C:\\Program Files\\nodejs\\node.exe","C:\\Users\\elysia\\Documents\\InkStream\\InkStream-main\\.nexthack2.cjs","dev","--port","3000"]

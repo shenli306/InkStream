@@ -1,5 +1,0 @@
-=== bootstrap 2026-10-19T16:09:36.499Z
-patched fork is fn
-imported ok
-CP.fork ["C:\\Users\\elysia\\Documents\\InkStream\\InkStream-main\\node_modules\\next\\dist\\server\\lib\\start-server.js","[object Object]"]
-CP.fork THROW EPERM | spawn EPERM

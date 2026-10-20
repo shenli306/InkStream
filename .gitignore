@@ -28,3 +28,20 @@ next-env.d.ts
 .island-*/**
 .npm-cache/
 .ring-css-test.*
+
+# 本机 scratch（dev server 启动 / 探测 / 迁移实验脚本，勿入库）
+/.boot*.cjs
+/.boot*.txt
+/.spawn*.cjs
+/.spawnstack.txt
+/.chain.txt
+/.launch.cjs
+/.dev-*.cjs
+/.dev-*.cmd
+/.dev-*.pid
+/.dev-*.txt
+/.nexthack*.cjs
+/.node-start-test.txt
+/.p.txt
+/.sp2.cjs
+/.start-test*.txt
