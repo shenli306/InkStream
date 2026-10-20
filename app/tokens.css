@@ -1,72 +1,95 @@
-/* ============================================================
-   InkStream 设计令牌层
-   ------------------------------------------------------------
-   唯一的颜色 / 排版 / 阴影 / 圆角 / 运动来源。
-   新代码只准引用这里的变量或语义工具类，不要再写 indigo-500、
-   pink-300 这类硬编码色值。
-
-   分层：
-     1. 基础色板（palette）—— 只在这一层出现具体色值
-     2. 语义令牌（semantic）—— 组件只用这一层
-     3. 排版刻度（type scale）
-     4. 间距 / 圆角 / 阴影 / 运动
-     5. 语义工具类
-
-   主题：暗色（墨底 #0d0c15）。
-   ink 系列越往 950 走越深，950 是页面底，700 是最浅的中性面。
-   粉蓝直接在暗底上发亮，强调色用 400 档，hover 用更亮的 300 档。
-   ============================================================ */
-
 /* ---------- 1. 基础色板 ---------- */
+/* 每个色板只在这一层出现具体色值，形式是 **RGB 通道三元组**（"247 198 221"），
+   紧接着用 rgb() 派生出同名整色变量，组件照旧用 var(--palette-pink-300)。
+
+   为什么拆通道：Tailwind 的透明度修饰符（bg-accent/10、text-content-primary/70）
+   必须让颜色值里带 <alpha-value> 占位，而占位只能落在 rgb() 的通道位置，
+   落不到一个整色 var(--x) 里。之前整色直连 → 这类类名被 Tailwind 静默丢弃
+   （.bg-accent 存在，.bg-accent/30 根本不存在）。
+   通道层同时给语义层转发，见第 2 节末尾的「通道」小节。 */
+
 :root {
+  /* 纯白：玻璃层 / 描边 / 文字的通道来源 */
+  --palette-white-rgb: 255 255 255;
+
   /* 品牌：粉蓝双色，300/400/500 由浅到深 */
-  --palette-pink-300: #f7c6dd;
-  --palette-pink-400: #f0a6c8;
-  --palette-pink-500: #e58ab4;
-  --palette-blue-300: #b8dcfa;
-  --palette-blue-400: #8ec5f0;
-  --palette-blue-500: #6aabdc;
+  --palette-pink-300-rgb: 247 198 221;
+  --palette-pink-400-rgb: 240 166 200;
+  --palette-pink-500-rgb: 229 138 180;
+  --palette-blue-300-rgb: 184 220 250;
+  --palette-blue-400-rgb: 142 197 240;
+  --palette-blue-500-rgb: 106 171 220;
 
   /* 中性：墨色基底，越浅越近白 */
-  --palette-ink-950: #0d0c15;
-  --palette-ink-900: #131220;
-  --palette-ink-850: #1a1828;
-  --palette-ink-800: #22203a;
-  --palette-ink-700: #2e2b47;
+  --palette-ink-950-rgb: 13 12 21;
+  --palette-ink-900-rgb: 19 18 32;
+  --palette-ink-850-rgb: 26 24 40;
+  --palette-ink-800-rgb: 34 32 58;
+  --palette-ink-700-rgb: 46 43 71;
 
   /* 夜色：新背景（黑穹顶 + 底部双角紫辉）用到的紫，单独一组便于整体调色 */
-  --palette-void: #000000;
-  --palette-violet-800: #4523a2; /* 底部两角最亮处 */
-  --palette-violet-900: #391c80; /* 底部中段底色 */
+  --palette-void-rgb: 0 0 0;
+  --palette-violet-800-rgb: 69 35 162; /* 底部两角最亮处 */
+  --palette-violet-900-rgb: 57 28 128; /* 底部中段底色 */
 
   /* 状态 */
-  --palette-green-400: #5eead4;
-  --palette-green-500: #34d399;
-  --palette-amber-400: #fbbf24;
-  --palette-amber-500: #f59e0b;
-  --palette-rose-400: #fb7185;
-  --palette-rose-500: #f43f5e;
-  --palette-red-400: #f87171;
-  --palette-cyan-400: #22d3ee;
+  --palette-green-400-rgb: 94 234 212;
+  --palette-green-500-rgb: 52 211 153;
+  --palette-amber-400-rgb: 251 191 36;
+  --palette-amber-500-rgb: 245 158 11;
+  --palette-rose-400-rgb: 251 113 133;
+  --palette-rose-500-rgb: 244 63 94;
+  --palette-red-400-rgb: 248 113 113;
+  --palette-cyan-400-rgb: 34 211 238;
+}
+
+/* 整色派生：通道 -> 颜色，名字与旧版一致 */
+:root {
+  --palette-pink-300: rgb(var(--palette-pink-300-rgb));
+  --palette-pink-400: rgb(var(--palette-pink-400-rgb));
+  --palette-pink-500: rgb(var(--palette-pink-500-rgb));
+  --palette-blue-300: rgb(var(--palette-blue-300-rgb));
+  --palette-blue-400: rgb(var(--palette-blue-400-rgb));
+  --palette-blue-500: rgb(var(--palette-blue-500-rgb));
+  --palette-ink-950: rgb(var(--palette-ink-950-rgb));
+  --palette-ink-900: rgb(var(--palette-ink-900-rgb));
+  --palette-ink-850: rgb(var(--palette-ink-850-rgb));
+  --palette-ink-800: rgb(var(--palette-ink-800-rgb));
+  --palette-ink-700: rgb(var(--palette-ink-700-rgb));
+  --palette-void: rgb(var(--palette-void-rgb));
+  --palette-violet-800: rgb(var(--palette-violet-800-rgb));
+  --palette-violet-900: rgb(var(--palette-violet-900-rgb));
+  --palette-green-400: rgb(var(--palette-green-400-rgb));
+  --palette-green-500: rgb(var(--palette-green-500-rgb));
+  --palette-amber-400: rgb(var(--palette-amber-400-rgb));
+  --palette-amber-500: rgb(var(--palette-amber-500-rgb));
+  --palette-rose-400: rgb(var(--palette-rose-400-rgb));
+  --palette-rose-500: rgb(var(--palette-rose-500-rgb));
+  --palette-red-400: rgb(var(--palette-red-400-rgb));
+  --palette-cyan-400: rgb(var(--palette-cyan-400-rgb));
 }
 
 /* ---------- 2. 语义令牌 ---------- */
 :root {
   /* 背景 */
-  --bg-base: var(--palette-ink-950);
-  --bg-raised: var(--palette-ink-900);
-  --bg-elevated: var(--palette-ink-850);
-  --bg-hover: var(--palette-ink-800);
-  --bg-scrim: rgba(13, 12, 21, 0.72);
+  --bg-base-rgb: var(--palette-ink-950-rgb);
+  --bg-base: rgb(var(--bg-base-rgb));
+  --bg-raised-rgb: var(--palette-ink-900-rgb);
+  --bg-raised: rgb(var(--bg-raised-rgb));
+  --bg-elevated-rgb: var(--palette-ink-850-rgb);
+  --bg-elevated: rgb(var(--bg-elevated-rgb));
+  --bg-hover-rgb: var(--palette-ink-800-rgb);
+  --bg-hover: rgb(var(--bg-hover-rgb));
+  --bg-scrim: rgb(var(--bg-base-rgb) / 0.72);
 
   /* 氛围背景：黑穹顶 + 左右下角紫辉 + 底部紫晕。fixed 铺满视口，随窗口缩放 */
   --bg-void: var(--palette-void);
   --bg-aurora: var(--palette-violet-800);
-  --bg-aurora-soft: rgba(69, 35, 162, 0.83);
-  --bg-aurora-mid: rgba(69, 35, 162, 0.581);
-  --bg-aurora-fade: rgba(69, 35, 162, 0);
-  --bg-aurora-tip: rgba(105, 52, 235, 0.16); /* 下两角尖端补光，修掉角尖偏暗 ~10/255 */
-  --bg-aurora-tip-fade: rgba(105, 52, 235, 0);
+  --bg-aurora-soft: rgb(var(--palette-violet-800-rgb) / 0.83);
+  --bg-aurora-mid: rgb(var(--palette-violet-800-rgb) / 0.581);
+  --bg-aurora-fade: rgb(var(--palette-violet-800-rgb) / 0);
+  --bg-aurora-tip: rgb(105 52 235 / 0.16); /* 下两角尖端补光，修掉角尖偏暗 ~10/255 */
+  --bg-aurora-tip-fade: rgb(105 52 235 / 0);
   --bg-aurora-depth: var(--palette-violet-900);
   --bg-atmosphere:
     radial-gradient(14% 18% at 0% 102%, var(--bg-aurora-tip) 0%, var(--bg-aurora-tip-fade) 100%),
@@ -76,54 +99,79 @@
     linear-gradient(180deg, transparent 55%, var(--bg-aurora-depth) 100%);
 
   /* 玻璃层：暗色主题下是「黑玻璃」——白透明很低，靠模糊把底衬成磨砂 */
-  --glass-subtle: rgba(255, 255, 255, 0.035);
-  --glass-base: rgba(255, 255, 255, 0.055);
-  --glass-strong: rgba(255, 255, 255, 0.09);
+  --glass-subtle: rgb(var(--palette-white-rgb) / 0.035);
+  --glass-base: rgb(var(--palette-white-rgb) / 0.055);
+  --glass-strong: rgb(var(--palette-white-rgb) / 0.09);
   --glass-blur-sm: blur(10px);
   --glass-blur-md: blur(16px);
   --glass-blur-lg: blur(24px);
 
-  /* 描边：暗底上用白透明，从几乎看不见到清晰 */
-  --border-faint: rgba(255, 255, 255, 0.055);
-  --border-subtle: rgba(255, 255, 255, 0.09);
-  --border-strong: rgba(255, 255, 255, 0.16);
+  /* 描边：暗底上用白透明，从几乎看不见到清晰。
+     -rgb/-alpha 两件套：Tailwind 只吃通道，默认 alpha 用一个变量接住，
+     这样 border-faint 不带修饰符时仍然是 0.055，不会被 <alpha-value> 扳成 1。 */
+  --border-faint-rgb: var(--palette-white-rgb);
+  --border-faint-alpha: 0.055;
+  --border-faint: rgb(var(--border-faint-rgb) / var(--border-faint-alpha));
+  --border-subtle-rgb: var(--palette-white-rgb);
+  --border-subtle-alpha: 0.09;
+  --border-subtle: rgb(var(--border-subtle-rgb) / var(--border-subtle-alpha));
+  --border-strong-rgb: var(--palette-white-rgb);
+  --border-strong-alpha: 0.16;
+  --border-strong: rgb(var(--border-strong-rgb) / var(--border-strong-alpha));
 
   /* 文字：四级，全部在墨底上达到 AA */
-  --text-primary: rgba(255, 255, 255, 0.94);
-  --text-secondary: rgba(255, 255, 255, 0.66);
-  --text-tertiary: rgba(255, 255, 255, 0.46);
-  --text-disabled: rgba(255, 255, 255, 0.28);
-  --text-inverse: #0b0a12;
+  --text-primary-rgb: var(--palette-white-rgb);
+  --text-primary-alpha: 0.94;
+  --text-primary: rgb(var(--text-primary-rgb) / var(--text-primary-alpha));
+  --text-secondary-rgb: var(--palette-white-rgb);
+  --text-secondary-alpha: 0.66;
+  --text-secondary: rgb(var(--text-secondary-rgb) / var(--text-secondary-alpha));
+  --text-tertiary-rgb: var(--palette-white-rgb);
+  --text-tertiary-alpha: 0.46;
+  --text-tertiary: rgb(var(--text-tertiary-rgb) / var(--text-tertiary-alpha));
+  --text-disabled-rgb: var(--palette-white-rgb);
+  --text-disabled-alpha: 0.28;
+  --text-disabled: rgb(var(--text-disabled-rgb) / var(--text-disabled-alpha));
+  --text-inverse-rgb: 11 10 18; /* #0b0a12，比 ink-900 再深一档，别换成 ink-900 */
+  --text-inverse: rgb(var(--text-inverse-rgb));
 
   /* 强调：主操作用蓝，高亮用粉。全站只有这两个强调色 */
-  --accent: var(--palette-blue-400);
-  --accent-hover: var(--palette-blue-300);
-  --accent-soft: rgba(142, 197, 240, 0.14);
-  --accent-border: rgba(142, 197, 240, 0.32);
-  --accent-glow: rgba(142, 197, 240, 0.28);
+  --accent-rgb: var(--palette-blue-400-rgb);
+  --accent: rgb(var(--accent-rgb));
+  --accent-hover-rgb: var(--palette-blue-300-rgb);
+  --accent-hover: rgb(var(--accent-hover-rgb));
+  --accent-soft: rgb(var(--accent-rgb) / 0.14);
+  --accent-border: rgb(var(--accent-rgb) / 0.32);
+  --accent-glow: rgb(var(--accent-rgb) / 0.28);
 
-  --highlight: var(--palette-pink-400);
-  --highlight-hover: var(--palette-pink-300);
-  --highlight-soft: rgba(240, 166, 200, 0.13);
-  --highlight-border: rgba(240, 166, 200, 0.3);
-  --highlight-glow: rgba(240, 166, 200, 0.24);
+  --highlight-rgb: var(--palette-pink-400-rgb);
+  --highlight: rgb(var(--highlight-rgb));
+  --highlight-hover-rgb: var(--palette-pink-300-rgb);
+  --highlight-hover: rgb(var(--highlight-hover-rgb));
+  --highlight-soft: rgb(var(--highlight-rgb) / 0.13);
+  --highlight-border: rgb(var(--highlight-rgb) / 0.3);
+  --highlight-glow: rgb(var(--highlight-rgb) / 0.24);
 
   /* 状态语义 */
-  --state-success: var(--palette-green-500);
-  --state-success-soft: rgba(52, 211, 153, 0.14);
-  --state-success-border: rgba(52, 211, 153, 0.3);
-  --state-warning: var(--palette-amber-500);
-  --state-warning-soft: rgba(245, 158, 11, 0.14);
-  --state-warning-border: rgba(245, 158, 11, 0.3);
-  --state-danger: var(--palette-rose-500);
-  --state-danger-soft: rgba(244, 63, 94, 0.14);
-  --state-danger-border: rgba(244, 63, 94, 0.3);
-  --state-info: var(--palette-cyan-400);
-  --state-info-soft: rgba(34, 211, 238, 0.14);
+  --state-success-rgb: var(--palette-green-500-rgb);
+  --state-success: rgb(var(--state-success-rgb));
+  --state-success-soft: rgb(var(--state-success-rgb) / 0.14);
+  --state-success-border: rgb(var(--state-success-rgb) / 0.3);
+  --state-warning-rgb: var(--palette-amber-500-rgb);
+  --state-warning: rgb(var(--state-warning-rgb));
+  --state-warning-soft: rgb(var(--state-warning-rgb) / 0.14);
+  --state-warning-border: rgb(var(--state-warning-rgb) / 0.3);
+  --state-danger-rgb: var(--palette-rose-500-rgb);
+  --state-danger: rgb(var(--state-danger-rgb));
+  --state-danger-soft: rgb(var(--state-danger-rgb) / 0.14);
+  --state-danger-border: rgb(var(--state-danger-rgb) / 0.3);
+  --state-info-rgb: var(--palette-cyan-400-rgb);
+  --state-info: rgb(var(--state-info-rgb));
+  --state-info-soft: rgb(var(--state-info-rgb) / 0.14);
 
   /* 渐变：品牌双色 + 表面微光 + 标题渐隐 */
   --gradient-brand: linear-gradient(135deg, var(--palette-pink-400), var(--palette-blue-400));
-  --gradient-surface: linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.015));
+  --gradient-surface: linear-gradient(180deg, rgb(var(--palette-white-rgb) / 0.06), rgb(var(--palette-white-rgb) / 0.015));
   --gradient-heading: linear-gradient(180deg, var(--text-primary) 0%, var(--text-primary) 58%, color-mix(in srgb, var(--text-primary) 34%, transparent) 100%);
 }
 
