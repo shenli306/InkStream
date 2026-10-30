@@ -3,6 +3,7 @@ import {
   Ban,
   CheckCircle2,
   ChevronDown,
+  ChevronLeft,
   CircleX,
   Download,
   HardDriveDownload,
@@ -20,6 +21,10 @@ interface DynamicIslandProps {
   message?: string;
   /** 当前书名：展开面板里显示，让用户知道正在等哪本书 */
   title?: string;
+  /** 是否有可返回的上一层（详情页时为 true，岛承担返回按钮的职责） */
+  canGoBack?: boolean;
+  /** 页面已滚动：折叠态收成小圆标，别继续横在内容上挡字喵~ */
+  compact?: boolean;
   onClick?: () => void;
   onIconClick?: (view: ViewId) => void;
   activeView?: ViewId;
@@ -27,7 +32,7 @@ interface DynamicIslandProps {
   onCancel?: () => void;
 }
 
-type IslandKind = 'idle' | 'search' | 'progress' | 'packing' | 'success' | 'error';
+type IslandKind = 'idle' | 'back' | 'search' | 'progress' | 'packing' | 'success' | 'error';
 
 interface StatusModel {
   expanded: boolean;
@@ -36,15 +41,27 @@ interface StatusModel {
   subtitle?: string;
   /** 是否可取消：搜索 / 抓取 / 解析 / 打包阶段都能取消 */
   cancellable: boolean;
+  /** 折叠态显示的文字与图标（首页“搜书” / 详情“返回搜索结果”） */
+  idleLabel?: string;
+  idleIcon?: 'search' | 'back';
 }
 
 const getStatusModel = (
   state: AppState,
   showSuccess: boolean,
   message: string | undefined,
+  canGoBack: boolean,
 ): StatusModel => {
   if (showSuccess) {
-    return { expanded: true, kind: 'success', title: '打包完成', subtitle: '文件已开始下载', cancellable: false };
+    return {
+      expanded: true,
+      kind: 'success',
+      title: '打包完成',
+      subtitle: '文件已开始下载',
+      cancellable: false,
+      idleLabel: canGoBack ? '返回搜索结果' : undefined,
+      idleIcon: canGoBack ? 'back' : undefined,
+    };
   }
 
   switch (state) {
@@ -61,13 +78,33 @@ const getStatusModel = (
     case AppState.ERROR:
       return { expanded: true, kind: 'error', title: '出现错误', subtitle: message, cancellable: false };
     default:
-      return { expanded: false, kind: 'idle', title: '', cancellable: false };
+      // 详情页：折叠态就是“返回搜索结果”。删掉浮动返回按钮后，这里是唯一的返回入口，
+      // 所以不能留空壳，得有图标 + 文字喵~
+      if (canGoBack) {
+        return {
+          expanded: false,
+          kind: 'back',
+          title: '',
+          cancellable: false,
+          idleLabel: '返回搜索结果',
+          idleIcon: 'back',
+        };
+      }
+      return {
+        expanded: false,
+        kind: 'idle',
+        title: '',
+        cancellable: false,
+        idleLabel: '搜书',
+        idleIcon: 'search',
+      };
   }
 };
 
 /** 状态 → 辉光色。注入成 --island-tone，CSS 侧只认这一个变量喵~ */
 const TONE: Record<IslandKind, string> = {
   idle: 'transparent',
+  back: 'var(--highlight-glow)',
   search: 'var(--accent-glow)',
   progress: 'var(--highlight-glow)',
   packing: 'var(--highlight-glow)',
@@ -110,6 +147,8 @@ const DynamicIslandComponent: React.FC<DynamicIslandProps> = ({
   progress,
   message,
   title,
+  canGoBack = false,
+  compact = false,
   onClick,
   onIconClick,
   onCancel,
@@ -135,8 +174,8 @@ const DynamicIslandComponent: React.FC<DynamicIslandProps> = ({
   }, [state]);
 
   const model = useMemo(
-    () => getStatusModel(state, showSuccess, message),
-    [state, showSuccess, message],
+    () => getStatusModel(state, showSuccess, message, canGoBack),
+    [state, showSuccess, message, canGoBack],
   );
 
   const safeProgress = clampPercent(progress);
@@ -219,7 +258,7 @@ const DynamicIslandComponent: React.FC<DynamicIslandProps> = ({
             onPointerUp={cancelPress}
             onPointerLeave={cancelPress}
             onPointerCancel={cancelPress}
-            aria-label="回到搜索"
+            aria-label={model.idleLabel ?? '回到搜索'}
           />
         )}
 
@@ -230,6 +269,7 @@ const DynamicIslandComponent: React.FC<DynamicIslandProps> = ({
             `dynamic-island__shell--${model.kind}`,
             model.expanded ? 'dynamic-island__shell--expanded' : '',
             model.expanded ? 'dynamic-island__shell--anim' : '',
+            !model.expanded && compact ? 'dynamic-island__shell--compact' : '',
             pressing ? 'dynamic-island__shell--pressing' : '',
           ].filter(Boolean).join(' ')}
           data-bounce={bounceTick % 2}
@@ -239,16 +279,20 @@ const DynamicIslandComponent: React.FC<DynamicIslandProps> = ({
           onPointerUp={cancelPress}
           onPointerLeave={cancelPress}
           onPointerCancel={cancelPress}
-          aria-label={model.expanded ? model.title : '点击回到搜索'}
+          aria-label={model.expanded ? model.title : (model.idleLabel ?? '回到搜索')}
           aria-expanded={model.cancellable ? panelOpen : undefined}
         >
           <span className="dynamic-island__press-ring" aria-hidden="true" />
-          <span className="dynamic-island__idle-indicator" aria-hidden="true" />
 
-          <span className="dynamic-island__hint" aria-hidden="true">
-            <Search size={12} />
-            回到搜索
-          </span>
+          {/* 折叠态：图标 + 文字常显。原来那条 56×5 白条纯装饰、看着像卡住的进度条，
+              而且只在 :hover 才换成提示——触屏上永远只见白条，等于没有信息喵~ */}
+          {!model.expanded && (
+            <span className="dynamic-island__hint">
+              {model.idleIcon === 'back'
+                ? <ChevronLeft size={14} aria-hidden="true" />
+                : <Search size={13} aria-hidden="true" />}
+            <span className="dynamic-island__hint-text">{model.idleLabel}</span>            </span>
+          )}
 
           <span className="dynamic-island__content">
             <span className="dynamic-island__status-icon">

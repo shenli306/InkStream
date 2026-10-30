@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Search, Download, ArrowRight, Loader2, Globe, FileText, CheckCircle2, AlertCircle, ChevronLeft, ArrowUp } from 'lucide-react';
+import { Search, Download, ArrowRight, Loader2, Globe, FileText, CheckCircle2, AlertCircle, ArrowUp } from 'lucide-react';
 import { Novel, AppState } from './types';
 import {
   searchNovel,
@@ -106,9 +106,13 @@ export default function App() {
 
   // Scroll-to-top state
   const [showScrollTop, setShowScrollTop] = useState(false);
+  // 滚动后把灵动岛收成小圆标：岛是 fixed 的，详情页正文会从它下面滚过去，
+  // 不收起来就会一直切掉书名的上半截喵~
+  const [islandCompact, setIslandCompact] = useState(false);
   useEffect(() => {
     const handleScroll = () => {
       setShowScrollTop(window.scrollY > 400);
+      setIslandCompact(window.scrollY > 120);
     };
     window.addEventListener('scroll', handleScroll, { passive: true });
     return () => window.removeEventListener('scroll', handleScroll);
@@ -369,13 +373,31 @@ export default function App() {
     }
   };
 
+  // 离开详情：回到搜索结果，并回到进来之前的滚动位置。
+  // 这是原来那个浮动返回按钮的行为，现在由灵动岛承担，所以两边必须一致。
+  const leaveDetail = useCallback(() => {
+    setSelectedNovel(null);
+    setState(AppState.PREVIEW);
+    setTimeout(() => window.scrollTo({ top: scrollPosition, behavior: 'smooth' }), 50);
+  }, [scrollPosition]);
+
   const handleIslandClick = useCallback(() => {
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-    if (state === AppState.PREVIEW || state === AppState.COMPLETE || state === AppState.IDLE) {
-      setSelectedNovel(null);
-      if (state === AppState.COMPLETE) setState(AppState.PREVIEW);
+    // 详情页（含完成态）：岛就是返回入口，直接回搜索结果
+    if (selectedNovel) {
+      leaveDetail();
+      return;
     }
-  }, [state]);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }, [selectedNovel, leaveDetail]);
+
+  // 长按岛：回到首页（清掉本次搜索与结果）。详情页里长按仍先回详情态的搜索结果。
+  const handleIslandLongPress = useCallback(() => {
+    if (selectedNovel) {
+      leaveDetail();
+      return;
+    }
+    resetToHome();
+  }, [selectedNovel, leaveDetail, resetToHome]);
 
   return (
     <div
@@ -396,25 +418,12 @@ export default function App() {
           progress={progressPercent}
           message={progressMessage}
           title={selectedNovel?.title}
+          canGoBack={Boolean(selectedNovel)}
+          compact={islandCompact}
           onClick={handleIslandClick}
-          onIconClick={resetToHome}
+          onIconClick={handleIslandLongPress}
           onCancel={cancelDownload}
         />
-      )}
-
-      {/* Back Button */}
-      {selectedNovel && (
-        <button
-          onClick={() => { 
-            setSelectedNovel(null); 
-            setState(AppState.PREVIEW); 
-            setTimeout(() => window.scrollTo({ top: scrollPosition, behavior: 'smooth' }), 50);
-          }}
-          className="app-back-btn fixed z-40 p-3 surface-glass rounded-full text-content-secondary hover:text-content-primary transition-all hover:scale-110 active:scale-95 group"
-          title="返回搜索"
-        >
-          <ChevronLeft size={24} className="group-hover:-translate-x-1 transition-transform" />
-        </button>
       )}
 
       {/* Reader Modal */}

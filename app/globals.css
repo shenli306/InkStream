@@ -413,24 +413,14 @@ input::placeholder {
 }
 
 /* ---- 悬浮控件在窄屏/刘海屏上的定位 ----
-   返回键在窄屏不能顶到灵动岛底下去（岛 z-index:100 会把点击吃掉），
-   回到顶部要避开底部手势条 */
-.app-back-btn {
-  top: calc(env(safe-area-inset-top) + 4.5rem);
-  left: calc(env(safe-area-inset-left) + 1rem);
-}
-
+   返回按钮已经收进灵动岛（岛的 z-index:100 本来就会吃掉它的点击），
+   这里只剩回到顶部，需要避开底部手势条 */
 .app-scroll-top {
   bottom: calc(env(safe-area-inset-bottom) + 1.25rem);
   right: calc(env(safe-area-inset-right) + 1.25rem);
 }
 
 @media (min-width: 640px) {
-  .app-back-btn {
-    top: calc(env(safe-area-inset-top) + 1.5rem);
-    left: calc(env(safe-area-inset-left) + 1.5rem);
-  }
-
   .app-scroll-top {
     bottom: calc(env(safe-area-inset-bottom) + 2rem);
     right: calc(env(safe-area-inset-right) + 2rem);

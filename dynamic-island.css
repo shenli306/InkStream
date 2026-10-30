@@ -30,6 +30,19 @@
   isolation: isolate;
   --island-ease: cubic-bezier(0.22, 1, 0.36, 1);
   --island-tone: transparent;      /* 状态辉光，由 TSX 按 kind 注入 */
+  transition: width 420ms var(--island-ease);
+}
+
+/* 紧凑态：容器也一起收窄，并且从「居中」滑到右上角——
+   居中收缩时圆标会正好钉在屏幕中线上，把书名的两行切断；
+   靠右后正文的中间那列就完整了，只在右边留一个小圆喵~ */
+.dynamic-island:has(.dynamic-island__shell--compact) {
+  width: 60px;
+  left: auto;
+  right: calc(env(safe-area-inset-right) + 0.75rem);
+  /* 收到最上沿：滚动后它要回避正文，越靠边越不碍事 */
+  top: calc(env(safe-area-inset-top) + 0.25rem);
+  transform: translate3d(0, 0, 0);
 }
 
 .dynamic-island__anchor {
@@ -39,12 +52,12 @@
   padding: 6px 10px 8px;
 }
 
-/* 折叠态的可点热区：120×36 的药丸点起来太小，撑到 48px 高喵~ */
+/* 折叠态的可点热区：跟着壳变宽，撑到 48px 高喵~ */
 .dynamic-island__hitpad {
   position: absolute;
   left: 50%;
   top: 50%;
-  width: max(132px, min(34vw, 120px));
+  width: max(160px, min(50vw, 168px));
   height: 48px;
   transform: translate3d(-50%, -50%, 0);
   border: 0;
@@ -56,7 +69,8 @@
 
 .dynamic-island__shell {
   position: relative;
-  width: min(34vw, 120px);
+  /* 折叠态要装下「返回搜索结果」+ 图标，原来 120px 是按空壳白条定的 */
+  width: min(46vw, 152px);
   height: 36px;
   padding: 0;
   overflow: hidden;
@@ -75,7 +89,9 @@
     inset 0 -1px 0 rgba(0, 0, 0, 0.30),
     0 0 24px -8px var(--island-tone);
   cursor: pointer;
-  touch-action: none;
+  /* 长按判定不受影响，但允许从药丸起手上下滚动页面——
+     原来写 none，岛又正好在顶部正中，手机上很容易误触后被吞掉滚动喵~ */
+  touch-action: pan-y;
   pointer-events: auto;
   will-change: width, height;
   transform: translate3d(0, 0, 0);
@@ -135,51 +151,66 @@
   outline-offset: 3px;
 }
 
-/* ---------- 折叠态：白条 + 悬停提示 + 长按进度 ---------- */
-.dynamic-island__idle-indicator {
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  width: 56px;
-  height: 5px;
-  border-radius: var(--radius-pill);
-  background: var(--text-disabled);
-  opacity: 1;
-  transform: translate3d(-50%, -50%, 0);
-  transition: opacity 140ms var(--ease-standard), transform 220ms var(--island-ease);
-}
-
-.dynamic-island__shell--expanded .dynamic-island__idle-indicator {
-  opacity: 0;
-  transform: translate3d(-50%, -50%, 0) scale3d(0.7, 0.7, 1);
-}
-
+/* ---------- 折叠态：图标 + 文字常显 ----------
+   原来这里是一条 56×5 的静态白条（.dynamic-island__idle-indicator），纯装饰：
+   没有任何状态读它，看着像卡在 0% 的进度条，且只有 :hover 才让提示文字浮现——
+   触屏上永远不触发，折叠态就只剩一条无意义的白线。现在折叠态直接常显图标+文字喵~ */
 .dynamic-island__hint {
   position: absolute;
   inset: 0;
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
+  gap: 5px;
+  padding: 0 12px;
   font-size: var(--text-2xs);
   font-weight: var(--weight-bold);
   letter-spacing: var(--tracking-wide);
   color: var(--text-secondary);
-  opacity: 0;
-  transform: translateY(4px);
+  white-space: nowrap;
+  opacity: 1;
+  transform: translate3d(0, 0, 0);
   transition: opacity 160ms var(--ease-standard), transform 220ms var(--island-ease);
 }
 
-.dynamic-island__hitpad:hover + .dynamic-island__shell .dynamic-island__hint,
-.dynamic-island__shell:not(.dynamic-island__shell--expanded):hover .dynamic-island__hint,
-.dynamic-island__shell:not(.dynamic-island__shell--expanded):focus-visible .dynamic-island__hint {
-  opacity: 1;
-  transform: translateY(0);
+.dynamic-island__hint svg {
+  flex: 0 0 auto;
+  opacity: 0.85;
 }
 
-.dynamic-island__hitpad:hover + .dynamic-island__shell .dynamic-island__idle-indicator,
-.dynamic-island__shell:not(.dynamic-island__shell--expanded):hover .dynamic-island__idle-indicator {
+.dynamic-island__hint-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* 折叠态的两种语气：首页=中性「搜书」，详情页=可返回的强调色 */
+.dynamic-island__shell--back .dynamic-island__hint {
+  color: var(--text-primary);
+}
+
+.dynamic-island__shell--back {
+  border-color: var(--border-strong);
+}
+
+.dynamic-island__shell--back .dynamic-island__hint svg {
+  color: var(--accent);
+  opacity: 1;
+}
+
+/* 折叠态的可点反馈：按下时文字稍微退一点，代替原来那条白条的“存在感” */
+.dynamic-island__shell:not(.dynamic-island__shell--expanded):hover .dynamic-island__hint {
+  color: var(--text-primary);
+}
+
+.dynamic-island__shell:not(.dynamic-island__shell--expanded):active .dynamic-island__hint {
+  transform: scale(0.97);
+}
+
+/* 展开后折叠态文字让位给内容（.dynamic-island__shell--expanded .dynamic-island__hint） */
+.dynamic-island__shell--expanded .dynamic-island__hint {
   opacity: 0;
+  transform: translate3d(0, -4px, 0);
+  pointer-events: none;
 }
 
 /* 长按 500ms 的可见反馈：白条下方一条从左长到右的渐变线 */
@@ -377,6 +408,8 @@
   position: absolute;
   top: calc(100% + 2px);
   left: 50%;
+  /* 面板的包含块是 __anchor（不是壳），所以别用 100%——锚点宽度会随折叠/展开变化，
+     面板会在打开瞬间跳尺寸。窄屏下取视口比例，桌面上限 320px 喵~ */
   width: min(92vw, 320px);
   display: grid;
   gap: 8px;
@@ -545,11 +578,48 @@
   }
 }
 
+/* 滚动后的紧凑态：收成小圆标，只留图标。
+   岛是 fixed 的，详情页往下滚时正文会从它下面经过，不收窄就一直在切字喵~ */
+.dynamic-island__shell--compact {
+  width: 44px;
+  padding-inline: 0;
+  /* 44px 的圆上没有空间给 backdrop-filter 采样，74% 半透明会显得像空气，
+     滚动中的内容会直接透出来读不清箭头，这里给它一层实底 */
+  background-color: var(--bg-elevated);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.10), rgba(255, 255, 255, 0.02)),
+    color-mix(in srgb, var(--bg-elevated) 96%, transparent);
+  box-shadow:
+    0 8px 24px -8px rgba(0, 0, 0, 0.8),
+    inset 0 1px 0 rgba(255, 255, 255, 0.12),
+    0 0 20px -6px var(--island-tone);
+}
+
+.dynamic-island__shell--compact .dynamic-island__hint {
+  padding: 0;
+  gap: 0;
+}
+
+.dynamic-island__shell--compact .dynamic-island__hint-text {
+  display: none;
+}
+
+/* 紧凑态下热区不再需要 168px 宽 */
+.dynamic-island:has(.dynamic-island__shell--compact) .dynamic-island__hitpad {
+  width: 52px;
+}
+
 /* 触摸端：展开面板里的「取消下载」原本只有 ~30px 高，手指容易点空 */
 @media (pointer: coarse) {
   .dynamic-island__panel-cancel {
     min-height: 2.75rem;
     padding-inline: 1rem;
+  }
+
+  /* 折叠态壳自己撑到 44px：外层 hitpad 是 48px，但壳本身也是 button，
+     手指按在壳上时命中区不该只有 36px */
+  .dynamic-island__shell:not(.dynamic-island__shell--expanded) {
+    height: 44px;
   }
 }
 

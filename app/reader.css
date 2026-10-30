@@ -293,6 +293,13 @@
   box-shadow: var(--shadow-overlay, 0 18px 48px -16px rgba(0, 0, 0, 0.6));
 }
 
+/* 面板贴着视口右缘，容不下 --ease-spring 那 1.56 的过冲（峰值会把右缘顶出屏幕），
+   换成不越过 1 的曲线；面板靠右，锚点设在右上角让缩放朝内喵~ */
+.reader-settings-panel.animate-scale-in {
+  animation-timing-function: var(--ease-smooth);
+  transform-origin: top right;
+}
+
 .reader-settings-panel .surface-elevated {
   background: var(--rd-bg-elevated, rgba(255, 255, 255, 0.05));
 }
