@@ -545,6 +545,14 @@
   }
 }
 
+/* 触摸端：展开面板里的「取消下载」原本只有 ~30px 高，手指容易点空 */
+@media (pointer: coarse) {
+  .dynamic-island__panel-cancel {
+    min-height: 2.75rem;
+    padding-inline: 1rem;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .dynamic-island *,
   .dynamic-island *::before,

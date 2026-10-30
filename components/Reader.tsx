@@ -104,7 +104,7 @@ export const Reader: React.FC<ReaderProps> = ({
   if (!chapter) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-stretch justify-center">
+    <div className={`fixed inset-0 z-50 flex items-stretch justify-center reader-theme--${settings.theme}`}>
       <div
         className="absolute inset-0 surface-scrim backdrop-blur-sm animate-overlay-in gpu-accelerated"
         onClick={onClose}
@@ -217,7 +217,7 @@ export const Reader: React.FC<ReaderProps> = ({
 
         {/* 设置面板 */}
         {showSettings && (
-          <div className="absolute top-16 right-3 sm:right-6 z-20">
+          <div className="reader-settings-anchor absolute right-3 sm:right-6 z-20">
             <ReaderSettingsPanel
               settings={settings}
               update={update}

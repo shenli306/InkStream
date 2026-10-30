@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Search, Download, ArrowRight, Loader2, Globe, FileText, CheckCircle2, AlertCircle, ChevronLeft, ArrowUp } from 'lucide-react';
 import { Novel, AppState } from './types';
 import {
@@ -27,16 +27,17 @@ export default function App() {
   const [error, setError] = useState<string | null>(null);
   const [scrollPosition, setScrollPosition] = useState(0);
   
-  // 检测设备类型
-  const isMobile = useMemo(() => {
-    if (typeof window === 'undefined') return false;
-    const userAgent = window.navigator.userAgent.toLowerCase();
-    return /android|webos|iphone|ipad|ipod|blackberry|iemobile|opera mini/i.test(userAgent);
-  }, []);
-  
+  // 设备类型不再靠 UA 嗅探：UA 判断在 SSR 首帧恒为 false，会让桌面分支先渲染一次再跳变。
+  // 尺寸相关的分档全部交给 CSS（sm:/md:/max-sm:）与 @media (pointer: coarse)。
   // 3068 书源选择模式喵~
   const [showSourceSelector, setShowSourceSelector] = useState(false);
   const [searchBoxTransform, setSearchBoxTransform] = useState({ scale: 1, opacity: 1, borderRadius: '2rem' });
+
+  // 手机上就是「空首屏」那一种状态：没有结果、没进详情、没开书源面板。
+  // 只有这一种情况让 hero 在可视区里垂直居中；一有内容就回到顶部对齐，
+  // 否则内容比屏幕高时 flex 居中会把顶部推出可视区且滚不到。
+  const isHomeIdle =
+    state === AppState.IDLE && !selectedNovel && searchResults.length === 0 && !showSourceSelector;
   
   const resolvedCoverUrl = resolveCoverUrl(selectedNovel?.coverUrl);
   
@@ -115,6 +116,39 @@ export default function App() {
 
   const scrollToTop = useCallback(() => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
+  }, []);
+
+  // —— 布局探针：`NEXT_PUBLIC_DEV_PROBE=1` + ?probe=detail|reader 才生效 ——
+  // 搜索结果得真联网抓外部书源，离线环境验不了详情页和阅读器，
+  // 这里用固定数据把真实组件树灌满，给 .mobile-audit/audit.mjs 做移动端验收用。
+  useEffect(() => {
+    if (process.env.NODE_ENV === 'production' || process.env.NEXT_PUBLIC_DEV_PROBE !== '1') return;
+    const probe = new URLSearchParams(window.location.search).get('probe');
+    if (!probe) return;
+    const chapters = Array.from({ length: 60 }, (_, i) => ({
+      number: i + 1,
+      title: `第${i + 1}章 ${['风起', '夜行', '旧约', '长灯', '归途'][i % 5]}的试炼与漫长的告别`,
+      url: `https://example.com/chapter/${i + 1}`,
+      content:
+        `　　这是第 ${i + 1} 章的正文。` +
+        '夜色像墨一样漫过窗棂，灯芯哔剥一响，纸页上的字便跟着亮了亮。他忽然想起许多年前的那个黄昏，' +
+        '风从山脚一路卷上来，把整条街的尘土都吹成了金色的雾。'.repeat(14),
+    }));
+    const novel: Novel = {
+      id: 'probe-novel',
+      title: '长夜将尽时的一段很长的小说标题',
+      author: '试读作者',
+      description: '这里是一段用来验证移动端排版的简介，长度接近真实书源返回的简介。'.repeat(16),
+      tags: ['仙侠', '群像', '慢热'],
+      status: 'Serializing',
+      detailUrl: 'https://example.com/novel/1',
+      chapters,
+      sourceName: '示例书源 | 备用书源',
+    };
+    setSearchResults([novel]);
+    setSelectedNovel(novel);
+    setState(AppState.PREVIEW);
+    if (probe === 'reader') setReadingChapterIndex(0);
   }, []);
 
   // 回到首页：重置搜索相关状态
@@ -345,25 +379,28 @@ export default function App() {
 
   return (
     <div
-      className="min-h-screen relative overflow-x-hidden text-content-primary pb-20 pt-20 sm:pt-32"
+      className="relative min-h-dvh flex flex-col overflow-x-hidden text-content-primary"
       style={{
-        paddingTop: 'calc(env(safe-area-inset-top) + 5rem)',
-        paddingBottom: 'calc(env(safe-area-inset-bottom) + 5rem)'
+        paddingTop: 'calc(env(safe-area-inset-top) + 4.5rem)',
+        paddingBottom: 'calc(env(safe-area-inset-bottom) + 2.5rem)'
       }}
     >
 
       {/* 水墨点缀：黑白墨色在暗底上浮动 */}
       <div className="ink-decoration" aria-hidden="true" />
 
-      <DynamicIsland
-        state={state}
-        progress={progressPercent}
-        message={progressMessage}
-        title={selectedNovel?.title}
-        onClick={handleIslandClick}
-        onIconClick={resetToHome}
-        onCancel={cancelDownload}
-      />
+      {/* 阅读态是整屏浮层，岛上那条药丸会盖住阅读器标题，阅读时收起 */}
+      {readingChapterIndex === null && (
+        <DynamicIsland
+          state={state}
+          progress={progressPercent}
+          message={progressMessage}
+          title={selectedNovel?.title}
+          onClick={handleIslandClick}
+          onIconClick={resetToHome}
+          onCancel={cancelDownload}
+        />
+      )}
 
       {/* Back Button */}
       {selectedNovel && (
@@ -373,11 +410,7 @@ export default function App() {
             setState(AppState.PREVIEW); 
             setTimeout(() => window.scrollTo({ top: scrollPosition, behavior: 'smooth' }), 50);
           }}
-          className="fixed z-40 p-3 surface-glass rounded-full text-content-secondary hover:text-content-primary transition-all hover:scale-110 active:scale-95 group"
-          style={{
-            top: 'calc(env(safe-area-inset-top) + 1.5rem)',
-            left: 'calc(env(safe-area-inset-left) + 1.5rem)'
-          }}
+          className="app-back-btn fixed z-40 p-3 surface-glass rounded-full text-content-secondary hover:text-content-primary transition-all hover:scale-110 active:scale-95 group"
           title="返回搜索"
         >
           <ChevronLeft size={24} className="group-hover:-translate-x-1 transition-transform" />
@@ -401,23 +434,23 @@ export default function App() {
         />
       )}
 
-      <main className="relative max-w-5xl mx-auto px-4 sm:px-6 pt-20 sm:pt-32 flex flex-col items-center min-h-[80vh]">
+      <main className={`relative w-full max-w-5xl mx-auto px-4 sm:px-6 pt-2 sm:pt-24 pb-16 sm:pb-24 flex flex-col items-center flex-1 ${isHomeIdle ? 'max-sm:justify-center' : ''}`}>
 
         {/* 小说搜索界面 */}
         <>
             {/* Header */}
-            <div className={`text-center ${state !== AppState.IDLE ? 'scale-75 opacity-50 mb-4' : isMobile ? 'mb-8' : 'mb-12'}`} style={{ transition: 'transform 400ms cubic-bezier(0.4,0,0.2,1), opacity 400ms cubic-bezier(0.4,0,0.2,1)' }}>
-              <h1 className={`heading-display text-gradient-heading mb-4 ${isMobile ? 'text-4xl sm:text-5xl' : 'text-6xl md:text-8xl'}`}>
+            <div className={`text-center ${state !== AppState.IDLE ? 'scale-75 opacity-50 mb-4' : 'mb-6 sm:mb-12'}`} style={{ transition: 'transform 400ms cubic-bezier(0.4,0,0.2,1), opacity 400ms cubic-bezier(0.4,0,0.2,1)' }}>
+              <h1 className="heading-display text-gradient-heading mb-3 sm:mb-4 text-4xl sm:text-5xl md:text-6xl lg:text-8xl">
                 InkStream
               </h1>
-              <p className={`text-content-tertiary font-light max-w-xl mx-auto flex items-center justify-center gap-2 ${isMobile ? 'text-sm sm:text-base' : 'text-xl'}`}>
+              <p className="text-content-tertiary font-light max-w-xl mx-auto flex items-center justify-center gap-2 text-sm sm:text-xl">
                 全网搜书 · 智能分章 · EPUB 打包
               </p>
             </div>
 
             {/* Search Input */}
             {state !== AppState.DOWNLOADING && state !== AppState.PARSING && state !== AppState.PACKING && !showSourceSelector && (
-              <div className="w-full max-w-2xl z-20 mb-12 flex flex-col items-center gap-6">
+              <div className="w-full max-w-2xl z-20 mb-6 sm:mb-12 flex flex-col items-center gap-6">
                 <form onSubmit={handleSearch} className="w-full relative group">
                   <div className="search-box-glow group-hover:opacity-40 transition-opacity duration-500"></div>
                   <div 
@@ -429,24 +462,30 @@ export default function App() {
                       transition: 'transform 300ms cubic-bezier(0.4,0,0.2,1), opacity 300ms cubic-bezier(0.4,0,0.2,1), border-radius 300ms cubic-bezier(0.4,0,0.2,1)',
                     }}
                   >
-                    <Search className={isMobile ? "ml-3 text-content-tertiary" : "ml-5 text-content-tertiary"} size={isMobile ? 20 : 24} />
+                    <Search className="ml-3 sm:ml-5 shrink-0 text-content-tertiary w-5 h-5 sm:w-6 sm:h-6" />
                     <input
                       type="text"
                       name="search"
                       autoComplete="off"
+                      autoCapitalize="off"
+                      autoCorrect="off"
+                      spellCheck={false}
+                      enterKeyHint="search"
+                      aria-label="小说名"
                       value={query}
                       onChange={e => setQuery(e.target.value)}
                       placeholder="输入小说名"
-                      className={`w-full bg-transparent border-none outline-none ${isMobile ? 'px-3 py-3 text-base' : 'px-4 py-4 text-lg'} text-content-primary placeholder:text-content-disabled font-medium`}
+                      className="w-full min-w-0 bg-transparent border-none outline-none px-3 py-3 text-[16px] sm:px-4 sm:py-4 sm:text-lg text-content-primary placeholder:text-content-disabled font-medium"
                     />
 
                     <button
                       type="submit"
                       disabled={state === AppState.SEARCHING}
-                      className={`bg-content-primary text-content-inverse ${isMobile ? 'px-6 py-2' : 'px-8 py-3'} rounded-pill font-bold hover:scale-105 active:scale-95 focus-visible:ring-2 focus-visible:ring-accent/60 disabled:opacity-50 disabled:scale-100 gpu-accelerated`}
+                      aria-label="搜索"
+                      className="shrink-0 inline-flex items-center justify-center w-11 h-11 sm:w-auto sm:h-auto sm:px-8 sm:py-3 bg-content-primary text-content-inverse rounded-pill font-bold hover:scale-105 active:scale-95 focus-visible:ring-2 focus-visible:ring-accent/60 disabled:opacity-50 disabled:scale-100 gpu-accelerated"
                       style={{ transition: 'transform 150ms cubic-bezier(0.4,0,0.2,1), opacity 250ms cubic-bezier(0.4,0,0.2,1)' }}
                     >
-                      {state === AppState.SEARCHING ? <Loader2 className="animate-spin" size={isMobile ? 16 : 20} /> : <ArrowRight size={isMobile ? 16 : 20} />}
+                      {state === AppState.SEARCHING ? <Loader2 className="animate-spin w-4 h-4 sm:w-5 sm:h-5" /> : <ArrowRight className="w-4 h-4 sm:w-5 sm:h-5" />}
                     </button>
                   </div>
                 </form>
@@ -465,7 +504,7 @@ export default function App() {
 
             {/* 3068 Source Selector Animation 喵~ */}
             {showSourceSelector && (
-              <div className="w-full max-w-2xl z-20 mb-12 flex flex-col items-center gap-6">
+              <div className="w-full max-w-2xl z-20 mb-6 sm:mb-12 flex flex-col items-center gap-6">
                 <SourceSelector 
                   onConfirm={() => {
                     setShowSourceSelector(false);
@@ -481,14 +520,14 @@ export default function App() {
 
             {/* Selected Novel Detail View */}
             {selectedNovel && (state === AppState.PREVIEW || state === AppState.ANALYZING || state === AppState.DOWNLOADING || state === AppState.PARSING || state === AppState.PACKING || state === AppState.COMPLETE) && (
-              <div className="w-full mt-4 mb-20 animate-enter-slide-up gpu-accelerated" style={{ willChange: 'transform, opacity' }}>
-                <div className="glass-panel p-8 md:p-12 relative overflow-hidden">
+              <div className="w-full mt-2 sm:mt-4 mb-16 sm:mb-20 animate-enter-slide-up gpu-accelerated" style={{ willChange: 'transform, opacity' }}>
+                <div className="glass-panel p-5 sm:p-8 md:p-12 relative overflow-hidden">
 
               {/* Detail Layout */}
-              <div className="flex flex-col md:flex-row gap-12 relative z-10">
+              <div className="flex flex-col md:flex-row gap-6 sm:gap-8 md:gap-12 relative z-10">
                 {/* Cover Mockup */}
                 <div className="w-full md:w-1/3 flex flex-col items-center">
-                  <div className="w-48 aspect-[2/3] bg-gradient-to-br from-raised to-elevated rounded-md shadow-lg flex items-center justify-center border border-subtle mb-8 relative overflow-hidden group">
+                  <div className="w-36 sm:w-48 aspect-[2/3] bg-gradient-to-br from-raised to-elevated rounded-md shadow-lg flex items-center justify-center border border-subtle mb-5 sm:mb-8 relative overflow-hidden group">
                     {resolvedCoverUrl ? (
                       <img 
                         src={resolvedCoverUrl} 
@@ -508,7 +547,7 @@ export default function App() {
                   {state === AppState.PREVIEW || state === AppState.COMPLETE ? (
                     <button
                       onClick={startDownloadProcess}
-                      className="w-full btn-primary py-4 text-lg hover:scale-[1.02] active:scale-95 focus-visible:ring-2 focus-visible:ring-accent/50"
+                      className="w-full btn-primary py-3.5 sm:py-4 text-base sm:text-lg hover:scale-[1.02] active:scale-95 focus-visible:ring-2 focus-visible:ring-accent/50"
                     >
                       <Download size={20} />
                       {selectedNovel.sourceName === '本地书库' ? "下载本地文件" : (state === AppState.COMPLETE ? "下载完成 (点击再次下载)" : "开始抓取并打包")}
@@ -522,14 +561,14 @@ export default function App() {
                       setState(AppState.PREVIEW); 
                       setTimeout(() => window.scrollTo({ top: scrollPosition, behavior: 'smooth' }), 50);
                     }}
-                    className="mt-4 text-content-tertiary text-sm hover:text-content-primary hover:underline transition-all"
+                    className="mt-1 sm:mt-4 inline-flex items-center justify-center min-h-11 px-4 text-content-tertiary text-sm hover:text-content-primary hover:underline transition-all"
                   >
                     返回搜索结果
                   </button>
                 </div>
 
                 {/* Metadata */}
-                <div className="flex-1 space-y-8">
+                <div className="flex-1 space-y-5 sm:space-y-8">
                   <div>
                     <div className="flex items-center gap-3 mb-4">
                       <span className={`badge ${selectedNovel.status === 'Completed' ? 'badge--success' : 'badge--warning'}`}>
@@ -538,7 +577,7 @@ export default function App() {
                       <span className="badge badge--accent">TXT直连</span>
                     </div>
                     <h2 className="heading-1 mb-2">{selectedNovel.title}</h2>
-                    <p className="text-xl text-accent mb-4">{selectedNovel.author}</p>
+                    <p className="text-lg sm:text-xl text-accent mb-4">{selectedNovel.author}</p>
 
                     {/* Tags 喵~ */}
                     {selectedNovel.tags && selectedNovel.tags.length > 0 && (
@@ -552,11 +591,11 @@ export default function App() {
                     )}
                   </div>
 
-                  <div className="body-text max-h-32 overflow-y-auto custom-scrollbar">
+                  <div className="body-text custom-scrollbar sm:max-h-32 sm:overflow-y-auto">
                     <p>{selectedNovel.description || "正在加载简介..."}</p>
                   </div>
 
-                  <div className="bg-raised rounded-lg p-6 border border-faint">
+                  <div className="bg-raised rounded-lg p-4 sm:p-6 border border-faint">
                     <h3 className="text-content-primary font-bold mb-4 flex items-center gap-2">
                       <Globe size={16} className="text-accent" />
                       数据来源
@@ -580,7 +619,7 @@ export default function App() {
                         <FileText size={16} className="text-accent" />
                         章节列表 (共 {selectedNovel.chapters.length} 章)
                       </h3>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-[300px] overflow-y-auto pr-2 custom-scrollbar">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-[50vh] sm:max-h-[300px] overflow-y-auto pr-1 sm:pr-2 custom-scrollbar">
                         {selectedNovel.chapters.slice(0, 50).map((c, idx) => (
                           <button
                             key={`${c.url}-${idx}`}
@@ -607,7 +646,7 @@ export default function App() {
 
         {/* Search Results List (Grid) */}
         {!selectedNovel && searchResults.length > 0 && (
-          <div className={`w-full grid ${isMobile ? 'grid-cols-1' : 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3'} gap-6 animate-enter-slide-up`}>
+          <div className="w-full grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 animate-enter-slide-up">
             {searchResults.map((item, idx) => (
               <BookCard key={`${item.id}-${idx}-${item.sourceName}`} novel={item} onSelect={handleSelectNovel} />
             ))}
@@ -620,7 +659,7 @@ export default function App() {
       {showScrollTop && (
         <button
           onClick={scrollToTop}
-          className="fixed z-40 bottom-8 right-8 p-4 surface-glass-strong rounded-pill text-content-primary shadow-lg hover:border-accent/40 hover:text-accent transition-all duration-300 hover:scale-110 active:scale-95 gpu-accelerated animate-scale-in"
+          className="app-scroll-top fixed z-40 p-3.5 sm:p-4 surface-glass-strong rounded-pill text-content-primary shadow-lg hover:border-accent/40 hover:text-accent transition-all duration-300 hover:scale-110 active:scale-95 gpu-accelerated animate-scale-in"
           aria-label="回到顶部"
           style={{
             willChange: 'transform, opacity',

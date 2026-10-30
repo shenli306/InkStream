@@ -46,7 +46,7 @@ function Stepper({
         type="button"
         onClick={dec}
         disabled={value <= min}
-        className="w-7 h-7 flex items-center justify-center rounded-xs text-content-secondary hover:bg-hover hover:text-content-primary disabled:opacity-30 transition-colors"
+        className="w-11 h-11 sm:w-7 sm:h-7 flex items-center justify-center rounded-xs text-content-secondary hover:bg-hover hover:text-content-primary disabled:opacity-30 transition-colors"
         aria-label={`${ariaLabel} 减小`}
       >
         <Minus size={14} />
@@ -58,7 +58,7 @@ function Stepper({
         type="button"
         onClick={inc}
         disabled={value >= max}
-        className="w-7 h-7 flex items-center justify-center rounded-xs text-content-secondary hover:bg-hover hover:text-content-primary disabled:opacity-30 transition-colors"
+        className="w-11 h-11 sm:w-7 sm:h-7 flex items-center justify-center rounded-xs text-content-secondary hover:bg-hover hover:text-content-primary disabled:opacity-30 transition-colors"
         aria-label={`${ariaLabel} 增大`}
       >
         <Plus size={14} />
@@ -92,7 +92,7 @@ export const ReaderSettingsPanel: React.FC<ReaderSettingsPanelProps> = ({ settin
         <button
           type="button"
           onClick={reset}
-          className="flex items-center gap-1 text-[11px] text-content-tertiary hover:text-accent transition-colors"
+          className="flex items-center gap-1 min-h-9 sm:min-h-0 text-[11px] text-content-tertiary hover:text-accent transition-colors"
         >
           <RotateCcw size={11} /> 恢复默认
         </button>
@@ -130,7 +130,7 @@ export const ReaderSettingsPanel: React.FC<ReaderSettingsPanelProps> = ({ settin
                 key={t.id}
                 type="button"
                 onClick={() => update('theme', t.id)}
-                className="w-7 h-7 rounded-full border transition-all"
+                className="w-11 h-11 sm:w-7 sm:h-7 rounded-full border transition-all"
                 style={{
                   background: t.swatch,
                   borderColor: settings.theme === t.id ? t.ring : 'var(--border-faint)',
@@ -152,7 +152,7 @@ export const ReaderSettingsPanel: React.FC<ReaderSettingsPanelProps> = ({ settin
                 key={w.id}
                 type="button"
                 onClick={() => update('width', w.id)}
-                className={`px-2.5 py-1 text-[11px] rounded-xs transition-colors ${
+                className={`min-h-11 sm:min-h-0 px-3 py-2 sm:px-2.5 sm:py-1 text-[11px] rounded-xs transition-colors ${
                   settings.width === w.id
                     ? 'bg-accent text-content-inverse font-medium'
                     : 'text-content-tertiary hover:text-content-primary'
@@ -172,7 +172,7 @@ export const ReaderSettingsPanel: React.FC<ReaderSettingsPanelProps> = ({ settin
                 key={f.id}
                 type="button"
                 onClick={() => update('font', f.id)}
-                className={`px-2.5 py-1 text-[11px] rounded-xs transition-colors ${
+                className={`min-h-11 sm:min-h-0 px-3 py-2 sm:px-2.5 sm:py-1 text-[11px] rounded-xs transition-colors ${
                   settings.font === f.id
                     ? 'bg-accent text-content-inverse font-medium'
                     : 'text-content-tertiary hover:text-content-primary'

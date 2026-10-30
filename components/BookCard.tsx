@@ -21,17 +21,17 @@ export const BookCard: React.FC<BookCardProps> = ({ novel, onSelect }) => {
       className="glass-panel rounded-lg overflow-hidden cursor-pointer group flex flex-col h-full relative card-hover gpu-accelerated"
       onClick={() => onSelect(novel)}
     >
-      <div className="p-6 relative flex-1 flex flex-col">
+      <div className="p-4 sm:p-6 relative flex-1 flex flex-col">
         {/* Cover & Tags Row */}
-        <div className="flex gap-4 mb-4">
+        <div className="flex gap-3 sm:gap-4 mb-4">
           <div className="w-16 h-24 surface-elevated rounded-sm shadow-md flex items-center justify-center text-content-disabled shrink-0 overflow-hidden relative">
             {coverUrl ? (
               <img src={coverUrl} alt={novel.title} className="w-full h-full object-cover" loading="lazy" />
             ) : (
               <Book size={28} />
             )}
-            {/* Hover overlay */}
-            <div className="absolute inset-0 surface-scrim opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-center justify-center">
+            {/* Hover overlay：触摸端没有真正的悬停，:hover 会在点完后粘住，窄屏直接不显示 */}
+            <div className="absolute inset-0 surface-scrim opacity-0 group-hover:opacity-100 transition-opacity duration-300 hidden sm:flex items-center justify-center">
               <BookOpen size={20} className="text-content-primary" />
             </div>
           </div>
@@ -75,7 +75,7 @@ export const BookCard: React.FC<BookCardProps> = ({ novel, onSelect }) => {
           {novel.description && novel.description.length > 80 && (
             <button
               onClick={(e) => { e.stopPropagation(); setIsExpanded(!isExpanded); }}
-              className="text-accent text-xs hover:text-accent-hover flex items-center gap-1 mt-1 transition-colors"
+              className="inline-flex items-center gap-1 min-h-11 px-1 -ml-1 text-accent text-xs hover:text-accent-hover transition-colors"
             >
               {isExpanded ? <><ChevronUp size={12} />收起</> : <><ChevronDown size={12} />展开</>}
             </button>
@@ -89,7 +89,7 @@ export const BookCard: React.FC<BookCardProps> = ({ novel, onSelect }) => {
             <span className="truncate">{sourceName}</span>
           </div>
           <button
-            className="w-9 h-9 rounded-sm flex items-center justify-center shrink-0 bg-accent-soft text-accent border border-accent-border group-hover:bg-accent group-hover:text-content-inverse group-hover:scale-110 transition-all duration-300 gpu-accelerated"
+            className="w-11 h-11 sm:w-9 sm:h-9 rounded-sm flex items-center justify-center shrink-0 bg-accent-soft text-accent border border-accent-border group-hover:bg-accent group-hover:text-content-inverse group-hover:scale-110 transition-all duration-300 gpu-accelerated"
             onClick={(e) => { e.stopPropagation(); onSelect(novel); }}
             aria-label={`选择《${novel.title}》`}
           >

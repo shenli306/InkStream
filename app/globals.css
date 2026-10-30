@@ -6,6 +6,27 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ---------- 移动端基底 ---------- */
+
+/* 触摸端去掉点击高亮方块（我们自己给 :active 反馈），并明确声明不做系统级字号缩放，
+   否则 iOS 横屏/「文字大小」设置会把版面撑歪 */
+html {
+  -webkit-tap-highlight-color: transparent;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+/* iOS 只在 input/textarea 字号 < 16px 时做「聚焦放大整页」，而且不会自己还原。
+   用 html input（0,1,1）压过 Tailwind 的 text-sm/text-xs 单类工具（0,1,0），
+   这样以后在组件里写小字号也不会把聚焦放大带回来 */
+@media (pointer: coarse) {
+  html input:not([type='checkbox']):not([type='radio']):not([type='range']),
+  html textarea,
+  html select {
+    font-size: 16px;
+  }
+}
+
 /* ---------- 全局基底 ---------- */
 
 /* 背景由三层叠加（设计稿：黑穹顶 + 底部双角紫辉）：
@@ -304,6 +325,9 @@ input::placeholder {
 .custom-scrollbar {
   scrollbar-width: thin;
   scrollbar-color: var(--border-strong) transparent;
+  /* 内层滚动区（详情简介、章节目录、抽屉）滚到底后别把整页一起带着滚 */
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
 }
 
 .custom-scrollbar::-webkit-scrollbar {
@@ -378,10 +402,39 @@ input::placeholder {
               border-color var(--dur-normal) var(--ease-standard);
 }
 
-.card-hover:hover {
-  will-change: transform;
-  transform: translateY(-4px) translateZ(0);
-  box-shadow: var(--shadow-lg), 0 0 32px -12px var(--highlight-glow);
+/* 只在真有指针悬停能力的设备上抬卡：触摸端 :hover 会在点击后「粘住」，
+   卡片就一直浮着不放，手指划过去还会随机跳动 */
+@media (hover: hover) and (pointer: fine) {
+  .card-hover:hover {
+    will-change: transform;
+    transform: translateY(-4px) translateZ(0);
+    box-shadow: var(--shadow-lg), 0 0 32px -12px var(--highlight-glow);
+  }
+}
+
+/* ---- 悬浮控件在窄屏/刘海屏上的定位 ----
+   返回键在窄屏不能顶到灵动岛底下去（岛 z-index:100 会把点击吃掉），
+   回到顶部要避开底部手势条 */
+.app-back-btn {
+  top: calc(env(safe-area-inset-top) + 4.5rem);
+  left: calc(env(safe-area-inset-left) + 1rem);
+}
+
+.app-scroll-top {
+  bottom: calc(env(safe-area-inset-bottom) + 1.25rem);
+  right: calc(env(safe-area-inset-right) + 1.25rem);
+}
+
+@media (min-width: 640px) {
+  .app-back-btn {
+    top: calc(env(safe-area-inset-top) + 1.5rem);
+    left: calc(env(safe-area-inset-left) + 1.5rem);
+  }
+
+  .app-scroll-top {
+    bottom: calc(env(safe-area-inset-bottom) + 2rem);
+    right: calc(env(safe-area-inset-right) + 2rem);
+  }
 }
 
 /* ---- 减小运动偏好 ---- */

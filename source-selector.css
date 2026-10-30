@@ -262,6 +262,16 @@
   }
 }
 
+@media (pointer: coarse) {
+  /* 开关的视觉尺寸保持 44×24 不变，靠伪元素把命中区上下各外扩 10px：
+     手指点在开关上下边缘也能命中，不会误触到相邻那一条 */
+  .source-selector__toggle::after {
+    content: '';
+    position: absolute;
+    inset: -10px -4px;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .source-selector *,
   .source-selector *::before,

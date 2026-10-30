@@ -30,6 +30,8 @@ next-env.d.ts
 .island-*/**
 .npm-cache/
 .ring-css-test.*
+# 手机适配审计（CDP 移动仿真脚本 + 截图 + 报告，本机 scratch）
+/.mobile-audit/
 
 # 本机 scratch（dev server 启动 / 探测 / 迁移实验脚本，勿入库）
 /.boot*.cjs

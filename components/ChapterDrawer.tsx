@@ -67,7 +67,7 @@ export const ChapterDrawer: React.FC<ChapterDrawerProps> = ({
           <button
             type="button"
             onClick={onClose}
-            className="p-1.5 rounded-sm text-content-tertiary hover:bg-hover hover:text-content-primary transition-colors shrink-0"
+            className="p-3.5 sm:p-1.5 rounded-sm text-content-tertiary hover:bg-hover hover:text-content-primary transition-colors shrink-0"
             aria-label="关闭目录"
           >
             <X size={16} />
@@ -75,14 +75,14 @@ export const ChapterDrawer: React.FC<ChapterDrawerProps> = ({
         </header>
 
         <div className="px-3 py-2 shrink-0">
-          <div className="flex items-center gap-2 surface-elevated rounded-sm px-2.5 py-1.5 focus-within:ring-1 focus-within:ring-accent/40">
+          <div className="flex items-center gap-2 surface-elevated rounded-sm px-2.5 py-2 focus-within:ring-1 focus-within:ring-accent/40">
             <Search size={13} className="text-content-tertiary shrink-0" />
             <input
               ref={inputRef}
               value={q}
               onChange={e => setQ(e.target.value)}
               placeholder="搜索章节标题…"
-              className="bg-transparent outline-none text-xs text-content-primary placeholder:text-content-disabled w-full"
+              className="bg-transparent outline-none text-[16px] sm:text-xs text-content-primary placeholder:text-content-disabled w-full"
               aria-label="搜索章节"
             />
             {q && (
@@ -105,7 +105,7 @@ export const ChapterDrawer: React.FC<ChapterDrawerProps> = ({
                   ref={isActive ? activeRef : undefined}
                   type="button"
                   onClick={() => { onSelect(i); onClose(); }}
-                  className={`w-full text-left px-3 py-2 rounded-sm text-xs transition-colors flex items-start gap-2 ${
+                  className={`w-full text-left px-3 py-3 sm:py-2 rounded-sm text-[13px] sm:text-xs transition-colors flex items-start gap-2 ${
                     isActive
                       ? 'bg-accent-soft text-accent font-medium border border-accent-border'
                       : 'text-content-secondary hover:bg-hover hover:text-content-primary border border-transparent'
